@@ -1,4 +1,41 @@
-KnowHow RAG(검색 증강 생성) AI 서버입니다.
+# KnowHow RAG(검색 증강 생성) AI 서버입니다.
+
+## airflow/
+
+본 파이프라인의 핵심 목적은 **AI 기반 추천 시스템(RAG)**에 필요한 최신 데이터를 완전 자동화된 방식으로 공급하는 것입니다.
+
+수집된 데이터는 AI 모델이 사용자의 상황과 키워드(예: "여행", "연금")에 맞는 최적의 상품을 실시간으로 검색하고 추천하는 데 사용됩니다.
+
+🗂️ 데이터 소스
+본 파이프라인은 2개의 주요 기관으로부터 총 4종의 금융 데이터를 수집합니다.
+
+금융감독원 (FSS) Open API
+
+정기예금: 금리, 우대조건, 가입 대상 등
+
+적금: 금리, 납입 방식, 우대조건 등
+
+연금저축: 상품 유형, 공시 이율, 운용사 등
+
+한국벤처투자 (KVIC) 펀드 현황
+
+펀드 정보: (향후 추가 예정) 벤처투자 펀드의 현황 및 정보를 크롤링 또는 API를 통해 수집합니다.
+
+⚙️ 기술 스택 및 실행
+워크플로우: Apache Airflow (Docker Compose 기반)
+
+데이터베이스: MongoDB (RAG VectorDB로 활용)
+
+핵심 라이브러리: Python, Requests, Pymongo
+
+실행 방법
+Airflow 실행:
+
+Bash
+
+docker-compose up -d --build
+
+## server/
 
 이 서버는 Spring Boot 백엔드 서버의 요청을 받아, MongoDB (VectorDB)에 저장된 금융 상품 데이터를 기반으로 Gemini LLM을 통해 사용자 맞춤형 상품을 추천하는 API를 제공합니다.
 
@@ -30,50 +67,19 @@ Infra: Docker
 
 먼저 .env.example 파일을 복사하여 .env 파일을 생성합니다.
 
-# .env.example 파일을 .env 파일로 복사
+### .env.example 파일을 .env 파일로 복사
 
 cp .env.example .env
 
-# nano 편집기로 .env 파일 열기
+### nano 편집기로 .env 파일 열기
 
 nano .env
 .env 파일에 실제 키와 주소를 입력합니다.
 
-# 3. 의존성 설치
+### 3. 의존성 설치
 
 pip install -r requirements.txt 4. AI 서버 실행 (팀 포트: 8302)
 
-# --port 8302 : 4팀 AI 서버 포트
+### --port 8302 : 4팀 AI 서버 포트
 
 uvicorn app.main:app --host 0.0.0.0 --port 8302 --reload
-
-🔗 연관 프로젝트: 데이터 파이프라인
-데이터의 수집 및 처리는 airflow 프로젝트에서 담당합니다.
-
-역할 (ETL):
-
-Extract: 금감원 Open API(정기예금, 적금, 연금저축) 및 우리은행(펀드 크롤링)에서 데이터를 추출합니다.
-
-Transform: 데이터를 RAG가 사용하기 좋은 텍스트(Vector) 및 정형 데이터로 변환합니다.
-
-Load:
-
-MongoDB (VectorDB): main-project-ai 서버가 RAG 검색에 사용할 수 있도록 벡터 데이터를 적재합니다. (AI 서버가 이 DB를 읽음)
-
-MySQL: Spring Boot 메인 서버가 사용할 수 있도록 정형 데이터를 적재합니다.
-
-실행 (Airflow):
-
-cd ~/main-project/main-project-airflow
-
-sudo docker-compose up -d
-
-🔑 팀 서버 정보 (Team 4)
-
-포트 범위: 8300-8399
-
-AI Server (FastAPI): 8302
-
-MongoDB: 8304
-
-Airflow UI: 8310
