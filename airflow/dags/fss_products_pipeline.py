@@ -6,12 +6,11 @@ from airflow.models.variable import Variable
 
 # --- 0. 설정: Airflow UI의 Variables에서 값 불러오기 ---
 try:
-    # .env 파일에서 불러온 변수를 Airflow Variable로 사용
     FSS_API_KEY = Variable.get("FSS_API_KEY")
     MONGO_DB_URL = Variable.get("MONGO_DB_URL")
-    MONGO_DB_NAME = Variable.get("DB_NAME") # .env의 DB_NAME 사용
+    MONGO_DB_NAME = Variable.get("DB_NAME")
 except KeyError:
-    # Airflow UI에 변수가 등록되지 않았을 경우를 대비
+    # Airflow UI에 변수가 등록되지 않았을 경우 exception
     raise Exception("Airflow Variables에 FSS_API_KEY, MONGO_DB_URL, DB_NAME을 등록해야 합니다.")
 
 # -------------------------------------------------------------------
@@ -26,7 +25,7 @@ def fetch_fss_data(api_endpoint: str, top_fin_grp_no: str):
     all_base_list = []
     all_option_list = []
     page_no = 1
-    max_page_no = 1
+    max_page_no = 1 # 1페이지 호출 후 실제 값으로 덮어쓰임
     
     while page_no <= max_page_no:
         params = {
@@ -36,24 +35,24 @@ def fetch_fss_data(api_endpoint: str, top_fin_grp_no: str):
         }
         try:
             response = requests.get(url, params=params, timeout=10)
-            response.raise_for_status()
+            response.raise_for_status() # 200 OK가 아니면 예외 발생
             data = response.json()
             result = data["result"]
             
             if result.get("err_cd") != "000":
                 print(f"API 오류 (Page {page_no}): {result.get('err_msg')}")
-                break
+                break # 오류 발생 시 중단
 
             all_base_list.extend(result.get("baseList", []))
             all_option_list.extend(result.get("optionList", []))
             
             max_page_no = int(result.get("max_page_no", 1)) # (중요) 최대 페이지 업데이트
             print(f"페이지 {page_no}/{max_page_no} 수집 완료...")
-            page_no += 1
+            page_no += 1 # 다음 페이지로
             
         except requests.exceptions.RequestException as e:
             print(f"API 호출 실패 (Page {page_no}): {e}")
-            raise
+            raise # Airflow가 이 Task를 'failed'로 처리하도록 예외 발생
             
     print(f"[{api_endpoint}] 추출 완료: 총 {len(all_base_list)}개 상품")
     return {"base_list": all_base_list, "option_list": all_option_list}
@@ -110,8 +109,9 @@ def transform_and_load_mongo(product_type: str, collection_name: str, data: dict
         
     try:
         client = MongoClient(MONGO_DB_URL, serverSelectionTimeoutMS=5000)
+        client.server_info() # DB 연결 테스트
         db = client[MONGO_DB_NAME]
-        collection = db[collection_name]
+        collection = db[collection_name] # <--- 인자로 받은 컬렉션 이름 사용
         
         print(f"[{product_type}] MongoDB ({MONGO_DB_NAME}.{collection_name})에 {len(mongo_docs_to_upsert)}개 문서 적재 (Upsert) 시작...")
         
@@ -172,14 +172,14 @@ def etl_annuity():
     return f"Annuity ETL Complete: {count} docs"
 
 # -------------------------------------------------------------------
-# [DAG] Airflow DAG 정의
+# [DAG] Airflow DAG 정의 (수정됨)
 # -------------------------------------------------------------------
 @dag(
-    dag_id="fss_products_etl_pipeline",
-    start_date=pendulum.datetime(2025, 1, 1, tz="Asia/Seoul"),
-    schedule="@daily", # 매일 자정에 실행
+    dag_id="fss_products_etl_pipeline_v2_separate_collections", # v2 DAG ID
+    start_date=pendulum.datetime(2025, 11, 1, tz="Asia/Seoul"),
+    schedule="0 3 * * *", # <-- [수정] 매일 새벽 3시에 실행
     catchup=False,
-    tags=["fss", "products", "etl", "team_4"],
+    tags=["fss", "products", "etl", "team_4", "separate_collections"],
 )
 def fss_financial_products_pipeline():
     """
