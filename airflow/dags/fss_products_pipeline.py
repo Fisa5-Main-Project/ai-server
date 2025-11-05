@@ -175,7 +175,7 @@ def etl_annuity():
 # [DAG] Airflow DAG 정의 (수정됨)
 # -------------------------------------------------------------------
 @dag(
-    dag_id="fss_products_etl_pipeline_v2_separate_collections", # v2 DAG ID
+    dag_id="fss_products_etl_pipeline", # DAG ID
     start_date=pendulum.datetime(2025, 11, 1, tz="Asia/Seoul"),
     schedule="0 3 * * *", # <-- [수정] 매일 새벽 3시에 실행
     catchup=False,
