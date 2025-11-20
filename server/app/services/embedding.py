@@ -1,12 +1,12 @@
-from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_google_genai import GoogleGenerativeAIEmbeddings
+from app.core.config import settings
 
-# Airflow 파이프라인에서 사용한 것과 동일한 임베딩 모델
-EMBEDDING_MODEL = "jhgan/ko-sroberta-multitask"
+# Gemini Embedding 모델 (API 호출 방식)
+EMBEDDING_MODEL = "models/text-embedding-004"
 print(f"Embedding 모델 {EMBEDDING_MODEL} 로드 중...")
 
-embeddings = HuggingFaceEmbeddings(
-    model_name=EMBEDDING_MODEL,
-    model_kwargs={'device': 'cpu'}, # (GPU가 없으므로 CPU 사용)
-    encode_kwargs={'normalize_embeddings': True}
+embeddings = GoogleGenerativeAIEmbeddings(
+    model=EMBEDDING_MODEL,
+    google_api_key=settings.GEMINI_API_KEY
 )
 print("Embedding 모델 로드 완료.")

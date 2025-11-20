@@ -150,7 +150,7 @@ services:
         <<: *airflow-common
         command: webserver
         ports:
-            - '8080:8080'
+            - '8310:8080'
         healthcheck:
             test: ['CMD', 'curl', '--fail', 'http://localhost:8080/health']
             interval: 30s
@@ -259,7 +259,7 @@ services:
         image: mongo:latest
         container_name: mongo_db # (중요) AI 서버가 이 이름으로 접속
         ports:
-            - '8304:27017'
+            - '8303:27017'
         volumes:
             - mongo-db-volume:/data/db
         restart: always
@@ -283,7 +283,7 @@ services:
         build: ./server # (수정) server/ 폴더의 Dockerfile 참조
         container_name: ai_server
         ports:
-            - '8302:8000' # Host 8302 -> Container 8000
+            - '8304:8000' # Host 8304 -> Container 8000
         env_file:
             - ./server/.env # (수정) server 폴더의 .env 참조
         depends_on:

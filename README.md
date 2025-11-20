@@ -78,8 +78,8 @@ nano .env
 
 ### 3. 의존성 설치
 
-pip install -r requirements.txt 4. AI 서버 실행 (팀 포트: 8302)
+pip install -r requirements.txt 4. AI 서버 실행 (팀 포트: 8304)
 
-### --port 8302 : 4팀 AI 서버 포트
+### --port 8304 : 4팀 AI 서버 포트
 
-uvicorn app.main:app --host 0.0.0.0 --port 8302 --reload
+uvicorn app.main:app --host 0.0.0.0 --port 8304 --reload

@@ -11,13 +11,7 @@ ENV PYTHONUNBUFFERED=1
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# --- [신규] 빌드 속도 향상을 위한 모델 캐시 ---
-# (이 부분은 requirements.txt가 변경될 때만 실행됩니다)
-# 5. 임베딩 모델을 Docker 이미지 빌드 시 미리 다운로드
-RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('jhgan/ko-sroberta-multitask')"
-
 # 6. 앱 코드 복사
-# (이 부분만 수정되면 1~5번은 캐시되어 빠르게 빌드됩니다)
 COPY ./app /app/app
 
 # 7. 컨테이너 '내부'에서 사용할 포트 (8000번)
