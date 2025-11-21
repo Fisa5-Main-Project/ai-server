@@ -42,6 +42,14 @@ try:
         embedding=embeddings,
         index_name="vector_index"
     )
+    
+    # [신규] 사용자 벡터 저장소
+    user_collection = db["users_vector"]
+    user_vector_store = MongoDBAtlasVectorSearch(
+        collection=user_collection,
+        embedding=embeddings,
+        index_name="vector_index"
+    )
     print("LangChain Vector Stores 초기화 완료.")
 
 except Exception as e:
@@ -50,3 +58,4 @@ except Exception as e:
     saving_vector_store = None
     annuity_vector_store = None
     fund_vector_store = None
+    user_vector_store = None

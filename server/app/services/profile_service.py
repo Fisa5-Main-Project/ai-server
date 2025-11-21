@@ -9,13 +9,15 @@ class ProfileService:
         print(f"user_id={user_id}의 페르소나 생성 시작...")
         
         # 1. users, users_info 테이블 조인 (1:1 관계)
-        # (주의: 실제 테이블/컬럼명에 맞게 쿼리 수정 필요)
+        # Schema Update: 
+        # - users: birth, asset_total, investment_tendancy (job 없음)
+        # - users_info: goal_amount, annual_income (investment_tendancy 없음)
         user_info_query = text(f"""
             SELECT 
-                u.birth, u.job, u.asset_total,
-                ui.investment_tendancy, ui.goal_amount, ui.annual_income
+                u.birth, u.asset_total, u.investment_tendancy,
+                ui.goal_amount, ui.annual_income
             FROM users u
-            JOIN users_info ui ON u.user_id = ui.user_id
+            JOIN user_info ui ON u.user_id = ui.user_id
             WHERE u.user_id = :user_id
         """)
         user_info = db.execute(user_info_query, {"user_id": user_id}).fetchone()
@@ -24,31 +26,33 @@ class ProfileService:
             print(f"사용자 정보(user_id={user_id})를 찾을 수 없습니다.")
             return "일반적인 금융 상품을 추천해줘."
 
-        # 2. user_keyword_map 테이블 조인 (N:M 관계)
-        # (주의: 실제 테이블/컬럼명에 맞게 쿼리 수정 필요)
+        # 2. user_keyword 테이블 조인 (N:M 관계)
+        # Schema Update: user_keyword_map -> user_keyword
         keywords_query = text(f"""
-            SELECT k.keyword_name
-            FROM user_keyword_map ukm
-            JOIN keywords k ON ukm.keyword_id = k.keyword_id
-            WHERE ukm.user_id = :user_id
+            SELECT k.name
+            FROM user_keyword uk
+            JOIN keyword k ON uk.keyword_id = k.keyword_id
+            WHERE uk.user_id = :user_id
         """)
         keywords_result = db.execute(keywords_query, {"user_id": user_id}).fetchall()
         keywords = [row[0] for row in keywords_result]
 
         # 3. 페르소나 텍스트 생성
         # (예시: birth(1990-01-01) -> 30대)
-        age = "30대" # (실제로는 birth로 계산)
+        # job 컬럼이 없으므로 제거
+        age = "30대" # (실제로는 birth로 계산 로직 필요하지만 일단 고정)
         
         persona = (
             f"사용자 프로필:\n"
-            f"- 나이/직업: {age}, {user_info.job}\n"
+            f"- 나이: {age}\n"
             f"- 총 자산: {user_info.asset_total}원, 연 소득: {user_info.annual_income}원\n"
             f"- 투자 성향: {user_info.investment_tendancy}\n"
             f"- 은퇴 목표 금액: {user_info.goal_amount}원\n"
             f"- 희망 키워드: {', '.join(keywords)}"
         )
+
         
-        print(f"생성된 페르소나: {persona}")
+        print(f"생성된 페르sona: {persona}")
         return persona
 
 profile_service = ProfileService()

@@ -1,16 +1,18 @@
 import pendulum
 from airflow.decorators import dag, task
-from airflow.models.variable import Variable
+
 
 from etl_utils import fetch_fss_data, transform_annuity, load_to_mongo
 
-# --- 0. 설정: Airflow UI의 Variables에서 값 불러오기 ---
-try:
-    FSS_API_KEY = Variable.get("FSS_API_KEY")
-    MONGO_DB_URL = Variable.get("MONGO_DB_URL")
-    MONGO_DB_NAME = Variable.get("DB_NAME")
-except KeyError:
-    raise Exception("Airflow Variables에 FSS_API_KEY, MONGO_DB_URL, DB_NAME을 등록해야 합니다.")
+import os
+
+# --- 0. 설정: .env 파일에서 환경 변수 불러오기 ---
+FSS_API_KEY = os.getenv("FSS_API_KEY")
+MONGO_DB_URL = os.getenv("MONGO_DB_URL")
+MONGO_DB_NAME = os.getenv("DB_NAME")
+
+if not all([FSS_API_KEY, MONGO_DB_URL, MONGO_DB_NAME]):
+    raise ValueError("필수 환경 변수(FSS_API_KEY, MONGO_DB_URL, DB_NAME)가 설정되지 않았습니다.")
 
 # [DAG] Airflow DAG 정의
 @dag(

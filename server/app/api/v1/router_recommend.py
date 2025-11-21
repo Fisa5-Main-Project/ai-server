@@ -20,3 +20,19 @@ async def get_recommendations(
         user_id=request.user_id
     )
     return recommendations
+
+@router.post("/vectorize/user/{user_id}")
+def vectorize_user(
+    user_id: int,
+    user_db: Session = Depends(get_user_db_session)
+):
+    """
+    특정 사용자의 정보를 RDS에서 읽어와 벡터화한 후 MongoDB에 저장합니다.
+    """
+    from app.services.vector_service import vector_service
+    
+    ids = vector_service.vectorize_user(user_db, user_id)
+    if not ids:
+        return {"status": "error", "message": "User not found or empty persona"}
+    
+    return {"status": "success", "message": f"User {user_id} vectorized", "ids": ids}
