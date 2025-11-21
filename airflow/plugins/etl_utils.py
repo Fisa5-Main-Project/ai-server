@@ -304,3 +304,20 @@ def transform_fsc_funds(fund_list: list):
         mongo_doc["_id"] = f"FSC_{fund.get('srtnCd', 'UNKNOWN')}_{fund.get('basDt', '')}" # ID 중복 방지를 위해 basDt 포함
         mongo_docs.append(mongo_doc)
     return mongo_docs
+
+def get_mongo_db_url():
+    import os
+    import urllib.parse
+    
+    username = os.getenv("MONGO_INITDB_ROOT_USERNAME", "admin")
+    password = os.getenv("MONGO_INITDB_ROOT_PASSWORD")
+    if password is None:
+        raise ValueError("MONGO_INITDB_ROOT_PASSWORD 환경 변수가 설정되지 않았습니다.")
+    
+    encoded_user = urllib.parse.quote_plus(username)
+    encoded_pwd = urllib.parse.quote_plus(password)
+    
+    host = "mongo"
+    port = "27017"
+    
+    return f"mongodb://{encoded_user}:{encoded_pwd}@{host}:{port}/?authSource=admin"

@@ -1,13 +1,12 @@
 import pendulum
 from airflow.decorators import dag, task
 from airflow.models.variable import Variable
-
-from etl_utils import fetch_fss_data, transform_deposit_saving, load_to_mongo
+from etl_utils import fetch_fss_data, transform_deposit_saving, load_to_mongo, get_mongo_db_url
 
 # --- 0. 설정: Airflow UI의 Variables에서 값 불러오기 ---
 try:
     FSS_API_KEY = Variable.get("FSS_API_KEY")
-    MONGO_DB_URL = Variable.get("MONGO_DB_URL")
+    MONGO_DB_URL = get_mongo_db_url()
     MONGO_DB_NAME = Variable.get("DB_NAME")
 except KeyError:
     raise Exception("Airflow Variables에 FSS_API_KEY, MONGO_DB_URL, DB_NAME을 등록해야 합니다.")

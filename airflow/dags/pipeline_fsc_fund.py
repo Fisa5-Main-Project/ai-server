@@ -1,13 +1,18 @@
 import pendulum
 from airflow.decorators import dag, task
 from airflow.models.variable import Variable
-
-from etl_utils import fetch_fsc_funds, transform_fsc_funds, load_to_mongo
+from etl_utils import fetch_fsc_funds, transform_fsc_funds, load_to_mongo, get_mongo_db_url
 
 # --- 0. 설정: Airflow UI의 Variables에서 값 불러오기 ---
+
+# ?authSource=admin 은 루트 계정이 admin DB에 생성되기 때문에 붙여주는 게 좋습니다.
+
+# 결과 확인 (실제 코드에선 print 금지 - 보안상)
+# print(MONGO_DB_URL) 
+# 출력예시: mongodb://admin:sec%40ret@mongo:27017/?authSource=admin
 try:
     FSC_API_KEY = Variable.get("FSC_API_KEY")
-    MONGO_DB_URL = Variable.get("MONGO_DB_URL")
+    MONGO_DB_URL = get_mongo_db_url()
     MONGO_DB_NAME = Variable.get("DB_NAME")
 except KeyError:
     raise Exception("Airflow Variables에 FSC_API_KEY, MONGO_DB_URL, DB_NAME을 등록해야 합니다.")
