@@ -120,8 +120,8 @@ services:
         container_name: sw_team_4_mongo
         image: mongodb/mongodb-atlas-local
         environment:
-            - MONGODB_INITDB_ROOT_USERNAME=admin
-            - MONGODB_INITDB_ROOT_PASSWORD=toor
+            - MONGODB_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
+            - MONGODB_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
         ports:
             - '8380:27017'
         volumes:
