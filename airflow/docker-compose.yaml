@@ -118,11 +118,15 @@ services:
 
     mongo:
         container_name: sw_team_4_mongo
-        image: mongo:latest
+        image: mongodb/mongodb-atlas-local
+        environment:
+            - MONGODB_INITDB_ROOT_USERNAME=admin
+            - MONGODB_INITDB_ROOT_PASSWORD=toor
         ports:
             - '8380:27017'
         volumes:
-            - mongo-db-volume:/data/db
+            - mongo-db-data:/data/db
+            - mongo-db-config:/data/configdb
         restart: always
 
     airflow-apiserver:
@@ -374,4 +378,5 @@ services:
 
 volumes:
     postgres-db-volume:
-    mongo-db-volume:
+    mongo-db-data:
+    mongo-db-config:
