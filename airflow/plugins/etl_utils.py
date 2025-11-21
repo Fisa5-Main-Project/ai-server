@@ -307,23 +307,13 @@ def transform_fsc_funds(fund_list: list):
 
 def get_mongo_db_url():
     import os
-    import urllib.parse
+    from pymongo.mongo_client import MongoClient
+    from pymongo.server_api import ServerApi
     
-    username = os.getenv("MONGO_INITDB_ROOT_USERNAME")
-    password = os.getenv("MONGO_INITDB_ROOT_PASSWORD")
+    username = os.getenv("MONGO_USERNAME")
+    password = os.getenv("MONGO_PASSWORD")
     host = os.getenv("MONGO_HOST")
-    
-    if not username:
-        username = "admin" 
 
-    if password is None:
-        raise ValueError("MONGO_INITDB_ROOT_PASSWORD 환경 변수가 설정되지 않았습니다.")
-    
-    encoded_user = urllib.parse.quote_plus(username)
-    encoded_pwd = urllib.parse.quote_plus(password)
-    
-    port = "8380"
-    
-    # 수정 1: authSource=admin 으로 고정
-    # 수정 2: port 뒤에 / 추가
-    return f"mongodb://{encoded_user}:{encoded_pwd}@{host}:{port}/?authSource=admin"
+    uri = f"mongodb+srv://{username}:{password}@{host}"
+
+    return uri

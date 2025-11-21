@@ -1,15 +1,8 @@
 import pendulum
 from airflow.decorators import dag, task
 from airflow.models.variable import Variable
-from etl_utils import fetch_kvic_funds, transform_kvic_funds, load_to_mongo,get_mongo_db_url
-
-# --- 0. 설정: Airflow UI의 Variables에서 값 불러오기 ---
-try:
-    KVIC_API_KEY = Variable.get("KVIC_API_KEY")
-    MONGO_DB_URL = get_mongo_db_url()
-    MONGO_DB_NAME = Variable.get("DB_NAME")
-except KeyError:
-    raise Exception("Airflow Variables에 KVIC_API_KEY, MONGO_DB_URL, DB_NAME을 등록해야 합니다.")
+# etl_utils의 get_mongo_db_url 함수가 최신 버전(f-string, mongodb://)인지 확인 필수
+from etl_utils import fetch_kvic_funds, transform_kvic_funds, load_to_mongo, get_mongo_db_url
 
 # [DAG] Airflow DAG 정의
 @dag(
@@ -24,7 +17,13 @@ def kvic_fund_pipeline():
 
     @task(task_id="extract_kvic_funds")
     def extract():
-        return fetch_kvic_funds(KVIC_API_KEY)
+        # [수정] API Key 호출을 Task 실행 시점으로 이동
+        try:
+            api_key = Variable.get("KVIC_API_KEY")
+        except KeyError:
+            raise Exception("Airflow Variables에 'KVIC_API_KEY'가 없습니다.")
+            
+        return fetch_kvic_funds(api_key)
 
     @task(task_id="transform_kvic_funds")
     def transform(data: list):
@@ -32,7 +31,14 @@ def kvic_fund_pipeline():
 
     @task(task_id="load_kvic_funds")
     def load(mongo_docs: list):
-        return load_to_mongo(MONGO_DB_URL, MONGO_DB_NAME, "products_fund_kvic", mongo_docs, "fund_kvic")
+        # [수정] DB 연결 설정을 Task 실행 시점으로 이동
+        try:
+            mongo_url = get_mongo_db_url()
+            db_name = Variable.get("DB_NAME")
+        except KeyError:
+            db_name = "financial_products" # 기본값
+
+        return load_to_mongo(mongo_url, db_name, "products_fund_kvic", mongo_docs, "fund_kvic")
 
     # Task 순서 정의: E -> T -> L
     extracted_data = extract()
