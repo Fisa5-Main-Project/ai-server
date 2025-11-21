@@ -326,4 +326,4 @@ def get_mongo_db_url():
     
     # 수정 1: authSource=admin 으로 고정
     # 수정 2: port 뒤에 / 추가
-    return f"mongodb://{encoded_user}:{encoded_pwd}@{host}:{port}/?directConnection=true&authSource=admin"
+    return f"mongodb://{encoded_user}:{encoded_pwd}@{host}:{port}/?authSource=admin"
