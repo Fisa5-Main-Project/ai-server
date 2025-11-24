@@ -8,7 +8,7 @@ from datetime import datetime
 @dag(
     dag_id="cleanup_expired_products_pipeline",
     start_date=pendulum.datetime(2025, 11, 1, tz="Asia/Seoul"),
-    schedule="0 4 * * 0",  # 매주 일요일 새벽 4시
+    schedule="50 3 * * *",  
     catchup=False,
     tags=["cleanup", "maintenance", "team_4"],
 )

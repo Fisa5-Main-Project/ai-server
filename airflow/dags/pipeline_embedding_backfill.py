@@ -56,7 +56,7 @@ def backfill_collection_embeddings(collection_name: str, display_name: str) -> i
 @dag(
     dag_id="embedding_backfill_pipeline",
     start_date=pendulum.datetime(2025, 11, 1, tz="Asia/Seoul"),
-    schedule="0 5 * * *",  
+    schedule="0 4 * * *",  
     catchup=False,
     tags=["embedding", "backfill", "team_4"],
 )
