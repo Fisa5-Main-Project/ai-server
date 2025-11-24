@@ -2,7 +2,7 @@ import pendulum
 from airflow.decorators import dag, task
 from airflow.models.variable import Variable
 # etl_utils.py 파일에 get_mongo_db_url 함수가 올바르게(f-string, mongodb://) 수정되어 있어야 합니다.
-from etl_utils import fetch_fss_data, transform_annuity, load_to_mongo, get_mongo_db_url
+from etl_utils import fetch_fss_data, transform_annuity, load_to_mongo, get_mongo_db_url, add_embeddings_to_docs
 
 # [DAG] Airflow DAG 정의
 @dag(
@@ -29,6 +29,11 @@ def fss_annuity_pipeline():
     def transform(data: dict):
         return transform_annuity(data)
 
+    @task(task_id="embed_annuity")
+    def embed(mongo_docs: list):
+        # Voyage AI 임베딩 추가
+        return add_embeddings_to_docs(mongo_docs)
+
     @task(task_id="load_annuity")
     def load(mongo_docs: list):
         # [수정] DB 연결 정보 조회도 실행 시점(Task 내부)에 수행
@@ -41,10 +46,11 @@ def fss_annuity_pipeline():
             
         return load_to_mongo(mongo_url, db_name, "products_annuity", mongo_docs, "annuity")
 
-    # Task 순서 정의: E -> T -> L
+    # Task 순서 정의: E -> T -> Embed -> L
     extracted_data = extract()
     transformed_data = transform(extracted_data)
-    load(transformed_data)
+    embedded_data = embed(transformed_data)
+    load(embedded_data)
 
 # DAG 실행
 fss_annuity_pipeline()

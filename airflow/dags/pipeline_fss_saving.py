@@ -2,13 +2,13 @@ import pendulum
 from airflow.decorators import dag, task
 from airflow.models.variable import Variable
 # etl_utils의 get_mongo_db_url이 최신 상태(mongodb://, f-string 적용)인지 확인 필수
-from etl_utils import fetch_fss_data, transform_deposit_saving, load_to_mongo, get_mongo_db_url
+from etl_utils import fetch_fss_data, transform_deposit_saving, load_to_mongo, get_mongo_db_url, add_embeddings_to_docs
 
 # [DAG] Airflow DAG 정의
 @dag(
     dag_id="fss_pipeline_saving",
     start_date=pendulum.datetime(2025, 11, 1, tz="Asia/Seoul"),
-    schedule="0 3 * * *", # 매일 새벽 3시 정각
+    schedule="30 3 * * *", # 매일 새벽 3시 정각
     catchup=False,
     tags=["fss", "saving", "etl", "team_4"],
 )
@@ -32,6 +32,11 @@ def fss_saving_pipeline():
         # product_type="saving"으로 전달
         return transform_deposit_saving(data, product_type="saving")
 
+    @task(task_id="embed_saving")
+    def embed(mongo_docs: list):
+        # Voyage AI 임베딩 추가
+        return add_embeddings_to_docs(mongo_docs)
+
     @task(task_id="load_saving")
     def load(mongo_docs: list):
         # [수정] DB 연결 설정을 Task 실행 시점으로 이동
@@ -43,10 +48,11 @@ def fss_saving_pipeline():
 
         return load_to_mongo(mongo_url, db_name, "products_saving", mongo_docs, "saving")
 
-    # Task 순서 정의: E -> T -> L
+    # Task 순서 정의: E -> T -> Embed -> L
     extracted_data = extract()
     transformed_data = transform(extracted_data)
-    load(transformed_data)
+    embedded_data = embed(transformed_data)
+    load(embedded_data)
 
 # DAG 실행
 fss_saving_pipeline()

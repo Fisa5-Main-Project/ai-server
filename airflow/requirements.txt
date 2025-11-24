@@ -3,3 +3,6 @@ pandas
 pymongo
 sqlalchemy
 mysql-connector-python
+langchain-google-genai
+langchain-core
+certifi

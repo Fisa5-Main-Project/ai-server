@@ -1,16 +1,13 @@
-# 환경변수, MongoDB/LLM API 키 관리 (Pydantic Settings)from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, SettingsConfigDict
 import os
 
 class Settings(BaseSettings):
-    """
-    .env 파일에서 환경 변수를 로드하는 설정 클래스
-    """
     
+    # [수정] .env 파일 경로를 'main-project-ai/server/' 폴더로 변경
     model_config = SettingsConfigDict(
-        # .env 파일 경로를 프로젝트 루트로 수정
         env_file=os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", ".env"),
         env_file_encoding='utf-8',
-        extra='ignore' # .env에 정의되지 않은 필드는 무시
+        extra='ignore'
     )
 
     # 1. Gemini LLM 설정
@@ -18,10 +15,11 @@ class Settings(BaseSettings):
 
     # 2. MongoDB (VectorDB) 설정
     MONGO_DB_URL: str
-    MONGO_DB_NAME: str = "ai_db"
+    DB_NAME: str
 
-    # 3. Financial Data API (금융결제원/금감원 등)
-    FINANCIAL_API_KEY: str
+    # 3. MySQL (User Profile DB) 설정
+    MYSQL_DB_URL: str
+    
+    # (API 키는 Airflow Variables에서만 사용하므로 여기서는 제거)
 
-# 설정 객체 인스턴스 생성 (다른 파일에서 import하여 사용)
 settings = Settings()
