@@ -72,6 +72,12 @@ x-airflow-common: &airflow-common
         _PIP_ADDITIONAL_REQUIREMENTS: ''
         # The following line can be used to set a custom config file, stored in the local config folder
         AIRFLOW_CONFIG: '/opt/airflow/config/airflow.cfg'
+        # [Custom] Airflow Variables Mapping
+        AIRFLOW_VAR_FSC_API_KEY: ${FSC_API_KEY}
+        AIRFLOW_VAR_FSS_API_KEY: ${FSS_API_KEY}
+        AIRFLOW_VAR_KVIC_API_KEY: ${KVIC_API_KEY}
+        AIRFLOW_VAR_DB_NAME: ${DB_NAME}
+        AIRFLOW_VAR_GEMINI_API_KEY: ${GEMINI_API_KEY}
     volumes:
         - ${AIRFLOW_PROJ_DIR:-.}/dags:/opt/airflow/dags
         - ${AIRFLOW_PROJ_DIR:-.}/logs:/opt/airflow/logs
@@ -86,6 +92,7 @@ x-airflow-common: &airflow-common
 
 services:
     postgres:
+        container_name: sw_team_4_postgres
         image: postgres:16
         environment:
             POSTGRES_USER: airflow
@@ -101,6 +108,7 @@ services:
         restart: always
 
     redis:
+        container_name: sw_team_4_redis
         # Redis is limited to 7.2-bookworm due to licencing change
         # https://redis.io/blog/redis-adopts-dual-source-available-licensing/
         image: redis:7.2-bookworm
@@ -114,22 +122,28 @@ services:
             start_period: 30s
         restart: always
 
-    mongo:
-        image: mongo:latest
-        ports:
-            - '8304:27017'
-        volumes:
-            - mongo-db-volume:/data/db
-        restart: always
+    # mongo:
+    #     container_name: sw_team_4_mongo
+    #     image: mongodb/mongodb-atlas-local
+    #     environment:
+    #         MONGODB_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
+    #         MONGODB_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
+    #     ports:
+    #         - '8380:27017'
+    #     volumes:
+    #         - mongo-db-data:/data/db
+    #         - mongo-db-config:/data/configdb
+    #     restart: always
 
     airflow-apiserver:
+        container_name: sw_team_4_airflow-apiserver
         <<: *airflow-common
         environment:
             <<: *airflow-common-env
             AIRFLOW__API__PORT: '8081' # <--- (수정) 다음 줄로 내리고 들여쓰기 맞춤
         command: api-server
         ports:
-            - '8081:8081'
+            - '8389:8081'
         healthcheck:
             test: ['CMD', 'curl', '--fail', 'http://localhost:8081/api/v2/monitor/health']
             interval: 30s
@@ -143,6 +157,7 @@ services:
                 condition: service_completed_successfully
 
     airflow-scheduler:
+        container_name: sw_team_4_airflow-scheduler
         <<: *airflow-common
         command: scheduler
         healthcheck:
@@ -158,6 +173,7 @@ services:
                 condition: service_completed_successfully
 
     airflow-dag-processor:
+        container_name: sw_team_4_airflow-dag-processor
         <<: *airflow-common
         command: dag-processor
         healthcheck:
@@ -173,6 +189,7 @@ services:
                 condition: service_completed_successfully
 
     airflow-worker:
+        container_name: sw_team_4_airflow-worker
         <<: *airflow-common
         command: celery worker
         healthcheck:
@@ -198,6 +215,7 @@ services:
                 condition: service_healthy
 
     airflow-triggerer:
+        container_name: sw_team_4_airflow-triggerer
         <<: *airflow-common
         command: triggerer
         healthcheck:
@@ -213,10 +231,11 @@ services:
                 condition: service_completed_successfully
 
     airflow-webserver:
+        container_name: sw_team_4_airflow-webserver
         <<: *airflow-common
         command: webserver
         ports:
-            - '8080:8080'
+            - '8388:8080'
         healthcheck:
             test: ['CMD', 'curl', '--fail', 'http://localhost:8080/health']
             interval: 30s
@@ -232,6 +251,7 @@ services:
                 condition: service_healthy
 
     airflow-init:
+        container_name: sw_team_4_airflow-init
         <<: *airflow-common
         entrypoint: /bin/bash
         # yamllint disable rule:line-length
@@ -324,6 +344,7 @@ services:
         user: '0:0'
 
     airflow-cli:
+        container_name: sw_team_4_airflow-cli
         <<: *airflow-common
         profiles:
             - debug
@@ -342,12 +363,13 @@ services:
     # or by explicitly targeted on the command line e.g. docker-compose up flower.
     # See: https://docs.docker.com/compose/profiles/
     flower:
+        container_name: sw_team_4_flower
         <<: *airflow-common
         command: celery flower
         profiles:
             - flower
         ports:
-            - '5555:5555'
+            - '8385:5555'
         healthcheck:
             test: ['CMD', 'curl', '--fail', 'http://localhost:5555/']
             interval: 30s
@@ -362,4 +384,5 @@ services:
 
 volumes:
     postgres-db-volume:
-    mongo-db-volume:
+    # mongo-db-data:
+    # mongo-db-config:

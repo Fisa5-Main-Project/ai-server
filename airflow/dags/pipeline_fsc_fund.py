@@ -1,48 +1,66 @@
 import pendulum
 from airflow.decorators import dag, task
 from airflow.models.variable import Variable
-
-from etl_utils import fetch_fsc_funds, transform_fsc_funds, load_to_mongo
-
-# --- 0. 설정: Airflow UI의 Variables에서 값 불러오기 ---
-try:
-    FSC_API_KEY = Variable.get("FSC_API_KEY")
-    MONGO_DB_URL = Variable.get("MONGO_DB_URL")
-    MONGO_DB_NAME = Variable.get("DB_NAME")
-except KeyError:
-    raise Exception("Airflow Variables에 FSC_API_KEY, MONGO_DB_URL, DB_NAME을 등록해야 합니다.")
+from etl_utils import fetch_fsc_funds, transform_fsc_funds, load_to_mongo, get_mongo_db_url, add_embeddings_to_docs
 
 # [DAG] Airflow DAG 정의
 @dag(
     dag_id="fsc_fund_standard_code_pipeline",
     start_date=pendulum.datetime(2025, 11, 1, tz="Asia/Seoul"),
-    schedule="20분 3 * * *", # 매일 새벽 3시 20분
+    schedule="20 3 * * *", # 매일 새벽 3시 20분
     catchup=False,
     tags=["fsc", "fund", "etl", "team_4", "preprocessing"],
 )
 def fsc_fund_pipeline():
     """[4팀] 금융위원회(data.go.kr) 펀드 정보를 수집/전처리하여 MongoDB에 적재합니다."""
 
-    # Airflow 템플릿 변수 {{ ds_nodash }} (YYYYMMDD)를 Task에 전달
+    # --- Extract Task ---
     @task(task_id="extract_fsc_funds")
     def extract(logical_date_str):
-        # YYYY-MM-DDTHH:MM:SS...Z -> YYYYMMDD
-        target_date = pendulum.parse(logical_date_str).subtract(days=1).format("YYYYMMDD")
-        return fetch_fsc_funds(FSC_API_KEY, target_date)
+        # [수정] Variable.get을 Task 안으로 이동 (성능 최적화)
+        try:
+            api_key = Variable.get("FSC_API_KEY")
+        except KeyError:
+            raise Exception("Airflow Admin -> Variables에 'FSC_API_KEY'를 등록해주세요.")
 
+        # YYYY-MM-DD... -> YYYYMMDD (하루 전 데이터 조회)
+        target_date = pendulum.parse(logical_date_str).subtract(days=1).format("YYYYMMDD")
+        return fetch_fsc_funds(api_key, target_date)
+
+    # --- Transform Task ---
     @task(task_id="transform_fsc_funds")
     def transform(data: list):
         return transform_fsc_funds(data)
 
+    # --- Embed Task ---
+    @task(task_id="embed_fsc_funds")
+    def embed(mongo_docs: list):
+        # Voyage AI 임베딩 추가
+        return add_embeddings_to_docs(mongo_docs)
+
+    # --- Load Task ---
     @task(task_id="load_fsc_funds")
     def load(mongo_docs: list):
-        return load_to_mongo(MONGO_DB_URL, MONGO_DB_NAME, "products_fsc_fund", mongo_docs, "fund_fsc")
+        # [수정] DB 연결 설정도 Task 안에서 수행
+        try:
+            db_name = Variable.get("DB_NAME") # 예: financial_products
+        except KeyError:
+            # 변수가 없으면 기본값 사용
+            db_name = "financial_products"
+            
+        mongo_url = get_mongo_db_url()
+        
+        # 로깅 (비번 마스킹 후 출력 권장)
+        print(f"Connecting to DB Name: {db_name}")
 
-    # Task 순서 정의: E -> T -> L
-    # {{ data_interval_start }}는 Airflow의 '논리적 실행 시작 시간' (새벽 2시 실행 시, 어제 날짜)
+        return load_to_mongo(mongo_url, db_name, "products_fsc_fund", mongo_docs, "fund_fsc")
+
+    # --- Pipeline 실행 흐름 ---
+    # logical_date_str를 인자로 전달
     extracted_data = extract("{{ data_interval_start }}")
     transformed_data = transform(extracted_data)
-    load(transformed_data)
+    embedded_data = embed(transformed_data)
+    load(embedded_data)
 
-# DAG 실행
+# DAG 인스턴스 생성
 fsc_fund_pipeline()
