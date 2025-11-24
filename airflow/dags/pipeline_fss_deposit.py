@@ -8,7 +8,7 @@ from etl_utils import fetch_fss_data, load_to_mongo, get_mongo_db_url, transform
 @dag(
     dag_id="fss_pipeline_deposit",
     start_date=pendulum.datetime(2025, 11, 1, tz="Asia/Seoul"),
-    schedule="10 3 * * *", # 매일 새벽 3시
+    schedule="10 3 * * *", 
     catchup=False,
     tags=["fss", "deposit", "etl", "team_4"],
 )
