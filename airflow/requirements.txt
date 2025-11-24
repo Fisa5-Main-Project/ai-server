@@ -3,4 +3,6 @@ pandas
 pymongo
 sqlalchemy
 mysql-connector-python
-voyageai
+langchain-google-genai
+langchain-core
+certifi

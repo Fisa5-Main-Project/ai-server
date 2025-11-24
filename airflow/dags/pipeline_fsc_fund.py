@@ -1,7 +1,7 @@
 import pendulum
 from airflow.decorators import dag, task
 from airflow.models.variable import Variable
-from etl_utils import fetch_fsc_funds, transform_fsc_funds, load_to_mongo, get_mongo_db_url
+from etl_utils import fetch_fsc_funds, transform_fsc_funds, load_to_mongo, get_mongo_db_url, add_embeddings_to_docs
 
 # [DAG] Airflow DAG 정의
 @dag(
@@ -32,6 +32,12 @@ def fsc_fund_pipeline():
     def transform(data: list):
         return transform_fsc_funds(data)
 
+    # --- Embed Task ---
+    @task(task_id="embed_fsc_funds")
+    def embed(mongo_docs: list):
+        # Voyage AI 임베딩 추가
+        return add_embeddings_to_docs(mongo_docs)
+
     # --- Load Task ---
     @task(task_id="load_fsc_funds")
     def load(mongo_docs: list):
@@ -53,7 +59,8 @@ def fsc_fund_pipeline():
     # logical_date_str를 인자로 전달
     extracted_data = extract("{{ data_interval_start }}")
     transformed_data = transform(extracted_data)
-    load(transformed_data)
+    embedded_data = embed(transformed_data)
+    load(embedded_data)
 
 # DAG 인스턴스 생성
 fsc_fund_pipeline()

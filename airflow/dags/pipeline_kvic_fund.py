@@ -2,13 +2,13 @@ import pendulum
 from airflow.decorators import dag, task
 from airflow.models.variable import Variable
 # etl_utils의 get_mongo_db_url 함수가 최신 버전(f-string, mongodb://)인지 확인 필수
-from etl_utils import fetch_kvic_funds, transform_kvic_funds, load_to_mongo, get_mongo_db_url
+from etl_utils import fetch_kvic_funds, transform_kvic_funds, load_to_mongo, get_mongo_db_url, add_embeddings_to_docs
 
 # [DAG] Airflow DAG 정의
 @dag(
     dag_id="kvic_fund_etl_pipeline",
     start_date=pendulum.datetime(2025, 11, 1, tz="Asia/Seoul"),
-    schedule="15 3 * * *", # 매일 새벽 3시 15분
+    schedule="40 3 * * *", # 매일 새벽 3시 15분
     catchup=False,
     tags=["kvic", "fund", "etl", "team_4", "preprocessing"],
 )
@@ -29,6 +29,11 @@ def kvic_fund_pipeline():
     def transform(data: list):
         return transform_kvic_funds(data)
 
+    @task(task_id="embed_kvic_funds")
+    def embed(mongo_docs: list):
+        # Voyage AI 임베딩 추가
+        return add_embeddings_to_docs(mongo_docs)
+
     @task(task_id="load_kvic_funds")
     def load(mongo_docs: list):
         # [수정] DB 연결 설정을 Task 실행 시점으로 이동
@@ -40,10 +45,11 @@ def kvic_fund_pipeline():
 
         return load_to_mongo(mongo_url, db_name, "products_fund_kvic", mongo_docs, "fund_kvic")
 
-    # Task 순서 정의: E -> T -> L
+    # Task 순서 정의: E -> T -> Embed -> L
     extracted_data = extract()
     transformed_data = transform(extracted_data)
-    load(transformed_data)
+    embedded_data = embed(transformed_data)
+    load(embedded_data)
 
 # DAG 실행
 kvic_fund_pipeline()

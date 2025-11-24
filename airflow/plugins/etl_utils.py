@@ -1,8 +1,10 @@
 import requests
 import math
 import re
+import time
 from pymongo import MongoClient
 from airflow.models.variable import Variable
+from langchain_google_genai import GoogleGenerativeAIEmbeddings
 
 # --- [E] Extract Functions ---
 
@@ -130,6 +132,70 @@ def fetch_fsc_funds(api_key: str, target_date: str):
     print(f"FSC 펀드 추출 완료: 총 {len(all_fund_items)}개 펀드 수집")
     return all_fund_items
 
+# --- [Embed] Embedding Functions ---
+
+def get_gemini_embeddings(texts: list[str], model: str = "models/text-embedding-004") -> list[list[float]]:
+    """Gemini(LangChain)를 사용하여 텍스트 리스트의 임베딩을 생성합니다."""
+    if not texts:
+        return []
+    
+    api_key = Variable.get("GEMINI_API_KEY")
+    
+    try:
+        # GoogleGenerativeAIEmbeddings 초기화
+        embeddings_model = GoogleGenerativeAIEmbeddings(
+            model=model,
+            google_api_key=api_key
+        )
+        
+        # 임베딩 생성
+        embeddings = embeddings_model.embed_documents(texts)
+        return embeddings
+    except Exception as e:
+        print(f"Gemini 임베딩 생성 실패: {e}")
+        raise
+
+def add_embeddings_to_docs(mongo_docs: list, batch_size: int = 5):
+    """MongoDB 문서 리스트의 'rag_text' 필드를 임베딩하여 'embedding' 필드에 추가합니다."""
+    if not mongo_docs:
+        return mongo_docs
+
+    print(f"임베딩 생성 시작: 총 {len(mongo_docs)}개 문서 (Batch Size: {batch_size})")
+    
+    # 임베딩 대상 텍스트 추출
+    texts_to_embed = [doc.get("rag_text", "") for doc in mongo_docs]
+    
+    all_embeddings = []
+    total_docs = len(texts_to_embed)
+    
+    # Batch 처리
+    for i in range(0, total_docs, batch_size):
+        batch_texts = texts_to_embed[i : i + batch_size]
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                embeddings = get_gemini_embeddings(batch_texts)
+                all_embeddings.extend(embeddings)
+                print(f"임베딩 진행 중: {min(i + batch_size, total_docs)}/{total_docs} 완료")
+                time.sleep(3.0) # 기본 대기 시간
+                break # 성공 시 retry 루프 탈출
+            except Exception as e:
+                error_msg = str(e)
+                if "429" in error_msg and attempt < max_retries - 1:
+                    wait_time = (attempt + 1) * 30 # 30초, 60초 대기
+                    print(f"Rate Limit (429) 발생. {wait_time}초 후 재시도합니다... (시도 {attempt + 1}/{max_retries})")
+                    time.sleep(wait_time)
+                else:
+                    print(f"Batch {i} 처리 중 오류 발생 (시도 {attempt + 1}/{max_retries}): {e}")
+                    raise
+
+    # 문서에 임베딩 추가
+    for doc, embedding in zip(mongo_docs, all_embeddings):
+        doc["embedding"] = embedding
+        
+    print("임베딩 추가 완료.")
+    return mongo_docs
+
 # --- [L] Load Function (공통 로더) ---
 
 def load_to_mongo(mongo_url: str, db_name: str, collection_name: str, mongo_docs: list, product_type: str):
@@ -137,8 +203,11 @@ def load_to_mongo(mongo_url: str, db_name: str, collection_name: str, mongo_docs
     if not mongo_docs:
         print(f"[{product_type}] MongoDB에 적재할 문서가 없습니다.")
         return 0
+    
+    client = None
     try:
-        client = MongoClient(mongo_url, serverSelectionTimeoutMS=5000)
+        import certifi
+        client = MongoClient(mongo_url, serverSelectionTimeoutMS=5000, tlsCAFile=certifi.where())
         db = client[db_name]
         collection = db[collection_name]
         
