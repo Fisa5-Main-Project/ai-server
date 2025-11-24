@@ -304,3 +304,16 @@ def transform_fsc_funds(fund_list: list):
         mongo_doc["_id"] = f"FSC_{fund.get('srtnCd', 'UNKNOWN')}_{fund.get('basDt', '')}" # ID 중복 방지를 위해 basDt 포함
         mongo_docs.append(mongo_doc)
     return mongo_docs
+
+def get_mongo_db_url():
+    import os
+    from pymongo.mongo_client import MongoClient
+    from pymongo.server_api import ServerApi
+    
+    username = os.getenv("MONGO_USERNAME")
+    password = os.getenv("MONGO_PASSWORD")
+    host = os.getenv("MONGO_HOST")
+
+    uri = f"mongodb+srv://{username}:{password}@{host}"
+
+    return uri

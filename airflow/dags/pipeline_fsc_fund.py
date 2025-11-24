@@ -1,16 +1,7 @@
 import pendulum
 from airflow.decorators import dag, task
-import os
-
-from etl_utils import fetch_fsc_funds, transform_fsc_funds, load_to_mongo
-
-# --- 0. 설정: .env 파일에서 환경 변수 불러오기 ---
-FSC_API_KEY = os.getenv("FSC_API_KEY")
-MONGO_DB_URL = os.getenv("MONGO_DB_URL")
-MONGO_DB_NAME = os.getenv("DB_NAME")
-
-if not all([FSC_API_KEY, MONGO_DB_URL, MONGO_DB_NAME]):
-    raise ValueError("필수 환경 변수(FSC_API_KEY, MONGO_DB_URL, DB_NAME)가 설정되지 않았습니다.")
+from airflow.models.variable import Variable
+from etl_utils import fetch_fsc_funds, transform_fsc_funds, load_to_mongo, get_mongo_db_url
 
 # [DAG] Airflow DAG 정의
 @dag(
@@ -23,26 +14,46 @@ if not all([FSC_API_KEY, MONGO_DB_URL, MONGO_DB_NAME]):
 def fsc_fund_pipeline():
     """[4팀] 금융위원회(data.go.kr) 펀드 정보를 수집/전처리하여 MongoDB에 적재합니다."""
 
-    # Airflow 템플릿 변수 {{ ds_nodash }} (YYYYMMDD)를 Task에 전달
+    # --- Extract Task ---
     @task(task_id="extract_fsc_funds")
     def extract(logical_date_str):
-        # YYYY-MM-DDTHH:MM:SS...Z -> YYYYMMDD
-        target_date = pendulum.parse(logical_date_str).subtract(days=1).format("YYYYMMDD")
-        return fetch_fsc_funds(FSC_API_KEY, target_date)
+        # [수정] Variable.get을 Task 안으로 이동 (성능 최적화)
+        try:
+            api_key = Variable.get("FSC_API_KEY")
+        except KeyError:
+            raise Exception("Airflow Admin -> Variables에 'FSC_API_KEY'를 등록해주세요.")
 
+        # YYYY-MM-DD... -> YYYYMMDD (하루 전 데이터 조회)
+        target_date = pendulum.parse(logical_date_str).subtract(days=1).format("YYYYMMDD")
+        return fetch_fsc_funds(api_key, target_date)
+
+    # --- Transform Task ---
     @task(task_id="transform_fsc_funds")
     def transform(data: list):
         return transform_fsc_funds(data)
 
+    # --- Load Task ---
     @task(task_id="load_fsc_funds")
     def load(mongo_docs: list):
-        return load_to_mongo(MONGO_DB_URL, MONGO_DB_NAME, "products_fsc_fund", mongo_docs, "fund_fsc")
+        # [수정] DB 연결 설정도 Task 안에서 수행
+        try:
+            db_name = Variable.get("DB_NAME") # 예: financial_products
+        except KeyError:
+            # 변수가 없으면 기본값 사용
+            db_name = "financial_products"
+            
+        mongo_url = get_mongo_db_url()
+        
+        # 로깅 (비번 마스킹 후 출력 권장)
+        print(f"Connecting to DB Name: {db_name}")
 
-    # Task 순서 정의: E -> T -> L
-    # {{ data_interval_start }}는 Airflow의 '논리적 실행 시작 시간' (새벽 2시 실행 시, 어제 날짜)
+        return load_to_mongo(mongo_url, db_name, "products_fsc_fund", mongo_docs, "fund_fsc")
+
+    # --- Pipeline 실행 흐름 ---
+    # logical_date_str를 인자로 전달
     extracted_data = extract("{{ data_interval_start }}")
     transformed_data = transform(extracted_data)
     load(transformed_data)
 
-# DAG 실행
+# DAG 인스턴스 생성
 fsc_fund_pipeline()
