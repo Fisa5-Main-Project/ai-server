@@ -292,8 +292,8 @@ services:
         env_file:
             - ./server/.env
         environment:
-            # Host MySQL (3306)
-            - DB_URL=mysql+pymysql://root:1234@host.docker.internal:3306/main_db
+            # MySQL connection from .env file
+            - MYSQL_DB_URL=${MYSQL_DB_URL}
         depends_on:
             - mongo
         extra_hosts:

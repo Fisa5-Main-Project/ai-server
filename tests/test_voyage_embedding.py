@@ -10,7 +10,7 @@ sys.modules["airflow.models.variable"] = MagicMock()
 sys.modules["voyageai"] = MagicMock()
 
 # Add plugins directory to path
-sys.path.append(os.path.abspath("c:/fisa/final-project/main-project-ai/airflow/plugins"))
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'airflow', 'plugins'))
 
 # Now import etl_utils
 from etl_utils import add_embeddings_to_docs
