@@ -7,8 +7,8 @@ from app.services.embedding import embeddings # 임베딩 모델 로드
 try:
     mongo_client = MongoClient(settings.MONGO_DB_URL, serverSelectionTimeoutMS=5000)
     mongo_client.server_info() # 연결 테스트
-    db = mongo_client[settings.DB_NAME]
-    print(f"MongoDB ({settings.DB_NAME}) 연결 성공.")
+    db = mongo_client[settings.MONGO_DB_NAME]
+    print(f"MongoDB ({settings.MONGO_DB_NAME}) 연결 성공.")
 except Exception as e:
     print(f"MongoDB 연결 실패: {e}")
     db = None
@@ -16,21 +16,15 @@ except Exception as e:
 # 2. RAG를 위한 Vector Store 컬렉션 정의
 # (Airflow가 이 컬렉션들에 데이터를 미리 적재해야 함)
 try:
-    deposit_collection = db["products_deposit"]
-    saving_collection = db["products_saving"]
+    deposit_saving_collection = db["products_deposit_saving"]
     annuity_collection = db["products_annuity"]
-    fund_collection = db["products_fsc_fund"] # 또는 products_fund_kvic
+    fund_collection = db["products_funds"] # 또는 products_fund_kvic
 
     # LangChain VectorStore 객체 생성
-    deposit_vector_store = MongoDBAtlasVectorSearch(
-        collection=deposit_collection,
+    deposit_saving_vector_store = MongoDBAtlasVectorSearch(
+        collection=deposit_saving_collection,
         embedding=embeddings,
         index_name="vector_index" # Airflow(rag_vectorize_pipeline.py)에서 생성한 인덱스
-    )
-    saving_vector_store = MongoDBAtlasVectorSearch(
-        collection=saving_collection,
-        embedding=embeddings,
-        index_name="vector_index"
     )
     annuity_vector_store = MongoDBAtlasVectorSearch(
         collection=annuity_collection,

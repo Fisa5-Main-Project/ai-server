@@ -14,8 +14,14 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: str
 
     # 2. MongoDB (VectorDB) 설정
-    MONGO_DB_URL: str
-    DB_NAME: str
+    MONGO_DB_NAME: str
+    MONGO_USERNAME: str
+    MONGO_PASSWORD: str
+    MONGO_HOST: str
+
+    @property
+    def MONGO_DB_URL(self):
+        return f"mongodb+srv://{self.MONGO_USERNAME}:{self.MONGO_PASSWORD}@{self.MONGO_HOST}"
 
     # 3. MySQL (User Profile DB) 설정
     MYSQL_DB_URL: str

@@ -16,7 +16,7 @@ from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
 from app.core.config import settings
 from app.db.vector_store import (
-    deposit_vector_store, saving_vector_store, 
+    deposit_saving_vector_store, 
     annuity_vector_store, fund_vector_store
 )
 from app.services.profile_service import profile_service
@@ -30,21 +30,16 @@ llm = ChatGoogleGenerativeAI(
 )
 
 # 2. Vector Store를 Tool로 변환
-deposit_retriever = deposit_vector_store.as_retriever(search_kwargs={'k': 2})
-saving_retriever = saving_vector_store.as_retriever(search_kwargs={'k': 2})
+#products_deposit_saving(예적금), products_funds(펀드), products_annuity(연금저축)
+deposit_saving_retriever = deposit_saving_vector_store.as_retriever(search_kwargs={'k': 2})
 annuity_retriever = annuity_vector_store.as_retriever(search_kwargs={'k': 2})
 fund_retriever = fund_vector_store.as_retriever(search_kwargs={'k': 2})
 
 tools = [
     create_retriever_tool(
-        deposit_retriever,
+        deposit_saving_retriever,
         "search_deposits",
         "정기예금 상품을 검색합니다. 사용자가 목돈을 한번에 예치하길 원할 때 유용합니다."
-    ),
-    create_retriever_tool(
-        saving_retriever,
-        "search_savings",
-        "적금 상품을 검색합니다. 사용자가 매달 꾸준히 돈을 모으길 원할 때 유용합니다."
     ),
     create_retriever_tool(
         annuity_retriever,
