@@ -23,8 +23,8 @@ def fsc_fund_pipeline():
         except KeyError:
             raise Exception("Airflow Admin -> Variables에 'FSC_API_KEY'를 등록해주세요.")
 
-        # YYYY-MM-DD... -> YYYYMMDD (하루 전 데이터 조회)
-        target_date = pendulum.parse(logical_date_str).subtract(days=1).format("YYYYMMDD")
+        # YYYY-MM-DD... -> YYYYMMDD (현재 날짜 데이터 조회)
+        target_date = pendulum.parse(logical_date_str).format("YYYYMMDD")
         return fetch_fsc_funds(api_key, target_date)
 
     # --- Transform Task ---
@@ -35,7 +35,7 @@ def fsc_fund_pipeline():
     # --- Embed Task ---
     @task(task_id="embed_fsc_funds")
     def embed(mongo_docs: list):
-        # Voyage AI 임베딩 추가
+        # Gemini 임베딩 추가
         return add_embeddings_to_docs(mongo_docs)
 
     # --- Load Task ---
