@@ -8,7 +8,7 @@ from etl_utils import fetch_kvic_funds, transform_kvic_funds, load_to_mongo, get
 @dag(
     dag_id="kvic_fund_etl_pipeline",
     start_date=pendulum.datetime(2025, 11, 1, tz="Asia/Seoul"),
-    schedule="40 3 * * *", # 매일 새벽 3시 15분
+    schedule="40 3 * * *", 
     catchup=False,
     tags=["kvic", "fund", "etl", "team_4", "preprocessing"],
 )

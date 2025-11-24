@@ -8,7 +8,7 @@ from etl_utils import fetch_fss_data, transform_annuity, load_to_mongo, get_mong
 @dag(
     dag_id="fss_pipeline_annuity",
     start_date=pendulum.datetime(2025, 11, 1, tz="Asia/Seoul"),
-    schedule="0 3 * * *", # 매일 새벽 3시 
+    schedule="0 3 * * *", 
     catchup=False,
     tags=["fss", "annuity", "etl", "team_4", "preprocessing"],
 )
