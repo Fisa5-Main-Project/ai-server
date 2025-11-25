@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+    ai_server:
+        build: ./server
+        container_name: ai_server
+        ports:
+            - '8304:8000'
+        env_file:
+            - ./server/.env
+        restart: unless-stopped
+        # EC2에서 On-Premise Mongo에 접속하려면 .env의 MONGO_DB_URL을 
+        # mongodb://<ON_PREM_PUBLIC_IP>:8380/... 으로 설정해야 함
