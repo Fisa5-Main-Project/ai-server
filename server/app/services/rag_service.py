@@ -38,8 +38,8 @@ fund_retriever = fund_vector_store.as_retriever(search_kwargs={'k': 2})
 tools = [
     create_retriever_tool(
         deposit_saving_retriever,
-        "search_deposits",
-        "정기예금 상품을 검색합니다. 사용자가 목돈을 한번에 예치하길 원할 때 유용합니다."
+        "search_deposits_and_savings",
+        "정기예금 또는 적금 상품을 검색합니다. 정기예금은 사용자가 목돈을 한번에 예치하길 원할 때, 적금은 매달 꾸준히 돈을 모으길 원할 때 유용합니다."
     ),
     create_retriever_tool(
         annuity_retriever,
