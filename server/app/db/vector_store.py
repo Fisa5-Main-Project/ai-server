@@ -7,8 +7,8 @@ from app.services.embedding import embeddings # 임베딩 모델 로드
 try:
     mongo_client = MongoClient(settings.MONGO_DB_URL, serverSelectionTimeoutMS=5000)
     mongo_client.server_info() # 연결 테스트
-    db = mongo_client[settings.DB_NAME]
-    print(f"MongoDB ({settings.DB_NAME}) 연결 성공.")
+    db = mongo_client[settings.MONGO_DB_NAME]
+    print(f"MongoDB ({settings.MONGO_DB_NAME}) 연결 성공.")
 except Exception as e:
     print(f"MongoDB 연결 실패: {e}")
     db = None

@@ -3,27 +3,11 @@
 """
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
-from typing import List, Optional
+from app.models.chatbot_models import ChatRequest, FeedbackRequest, FeedbackResponse
 from app.services.chatbot_service import chatbot_service
 import json
 
 router = APIRouter(tags=["Chatbot"])
-
-
-class ChatRequest(BaseModel):
-    user_id: int
-    session_id: str
-    message: str
-    keywords: Optional[List[int]] = None
-
-
-class FeedbackRequest(BaseModel):
-    user_id: int
-    session_id: str
-    message_id: str
-    feedback: str  # "like" or "dislike"
-    product_id: Optional[str] = None
 
 
 @router.post("/chat/stream")
@@ -32,8 +16,20 @@ async def chat_stream(request: ChatRequest):
     스트리밍 챗봇 API (SSE)
     
     - 사용자 메시지를 받아 실시간으로 응답 스트리밍
+    - 사용자 컨텍스트(페르소나 + 추가 키워드) 자동 로딩
     - 대화 히스토리 자동 저장
     - 금융상품 외 질문 예외처리
+    
+    **Parameters:**
+    - user_id: 사용자 ID
+    - session_id: 세션 ID (채팅방 구분)
+    - message: 사용자 메시지
+    - keywords: (Optional) 추가 관심 키워드 ID 리스트
+    
+    **Returns:** SSE 스트리밍 응답
+    - type: "token" - 토큰 단위 응답
+    - type: "done" - 완료 신호
+    - type: "error" - 에러 발생
     """
     async def event_generator():
         try:
@@ -64,13 +60,20 @@ async def chat_stream(request: ChatRequest):
     )
 
 
-@router.post("/chat/feedback")
+@router.post("/chat/feedback", response_model=FeedbackResponse)
 async def save_feedback(request: FeedbackRequest):
     """
     사용자 피드백 저장 API
     
     - 좋아요/싫어요 피드백 수집
     - 로그 분석용 데이터 저장
+    
+    **Parameters:**
+    - user_id: 사용자 ID
+    - session_id: 세션 ID
+    - message_id: 메시지 ID
+    - feedback: "like" or "dislike"
+    - product_id: (Optional) 추천된 상품 ID
     """
     try:
         chatbot_service.save_feedback(
@@ -80,7 +83,10 @@ async def save_feedback(request: FeedbackRequest):
             feedback=request.feedback,
             product_id=request.product_id
         )
-        return {"status": "success", "message": "피드백이 저장되었습니다."}
+        return FeedbackResponse(
+            status="success",
+            message="피드백이 저장되었습니다."
+        )
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"피드백 저장 실패: {str(e)}")

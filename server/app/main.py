@@ -5,30 +5,49 @@ from app.api.v1 import router_recommend, router_chat, router_vectorize
 app = FastAPI(
     title="노후하우 AI 추천 서버",
     description="RAG와 Gemini를 이용한 개인 맞춤형 금융상품 추천 API",
-    version="1.0.0"
+    version="2.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc"
 )
 
-# CORS 설정 (Spring Boot 게이트웨이 연동)
+# CORS 설정 (Next.js 직접 연결)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:8060",  # Spring Boot (local)
-        "http://localhost:3000",  # Next.js (local)
-        "https://fisa-main-project.vercel.app",  # Vercel
+        "http://localhost:3000",  # Next.js (local dev)
+        "http://127.0.0.1:3000",  # Next.js (local dev - alternative)
+        "https://fisa-main-project.vercel.app",  # Vercel (dev/preview)
         "https://knowwhohow.cloud",  # Production
         "https://www.knowwhohow.cloud",
-        "https://knowwhohow.site",  # Production
-        "https://www.knowwhohow.site"
+        "https://knowwhohow.site",  # Production (alternative)
+        "https://www.knowwhohow.site",
     ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"]
 )
 
 # API v1 라우터 포함
 app.include_router(router_recommend.router, prefix="/api/v1")
 app.include_router(router_chat.router, prefix="/api/v1")
 app.include_router(router_vectorize.router, prefix="/api/v1")
+
+
+@app.get("/")
+def root():
+    return {
+        "service": "노후하우 AI 추천 서버",
+        "version": "2.0.0",
+        "description": "RAG 기반 금융상품 추천 및 챗봇 API",
+        "endpoints": {
+            "docs": "/docs",
+            "recommendations": "/api/v1/recommendations/{user_id}",
+            "chat_stream": "/api/v1/chat/stream",
+            "chat_feedback": "/api/v1/chat/feedback",
+            "vectorize": "/api/v1/users/{user_id}/vectorize"
+        }
+    }
 
 
 @app.get("/health")

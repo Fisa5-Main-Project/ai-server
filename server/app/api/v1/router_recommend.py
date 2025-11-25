@@ -17,10 +17,21 @@ async def get_recommendations(user_id: int):
     - Vector Search로 유사한 금융상품 검색
     - 예적금, 연금저축, 펀드 각 1개씩 추천
     
-    Returns:
-        - deposit_or_saving: 예금 또는 적금 추천
-        - annuity: 연금저축 추천
-        - fund: 펀드 추천
+    **Parameters:**
+    - user_id: 사용자 ID
+    
+    **Returns:**
+    - deposit_or_saving: 예금 또는 적금 추천 (RecommendedProduct)
+    - annuity: 연금저축 추천 (RecommendedProduct)
+    - fund: 펀드 추천 (RecommendedProduct)
+    
+    **RecommendedProduct 구조:**
+    - product_id: MongoDB document ID (피드백 추적용)
+    - product_type: "예금", "적금", "연금저축", "펀드"
+    - product_name: 상품명
+    - company_name: 제공회사
+    - benefit: 핵심 혜택 요약
+    - reason: AI 생성 추천 이유
     """
     try:
         recommendations = await rag_service.get_recommendations(user_id)

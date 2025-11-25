@@ -13,7 +13,7 @@ class UserVectorizationService:
     def __init__(self):
         self.spring_boot_url = settings.SPRING_BOOT_API_URL
         self.mongo_client = MongoClient(settings.MONGO_DB_URL)
-        self.db = self.mongo_client[settings.DB_NAME]
+        self.db = self.mongo_client[settings.MONGO_DB_NAME]
         self.user_vectors_collection = self.db["user_vectors"]
     
     def get_user_data_from_db(self, user_id: int) -> dict:

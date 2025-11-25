@@ -4,6 +4,8 @@
 import asyncio
 from typing import TypedDict, Annotated, Sequence
 import operator
+import json
+import re
 
 # --- LangGraph & Agent 관련 임포트 ---
 from langgraph.graph import StateGraph, END
@@ -26,12 +28,12 @@ from app.models.recommendation import RecommendationResponse, RecommendedProduct
 
 # 1. Gemini LLM 모델 초기화
 llm = ChatGoogleGenerativeAI(
-    model="gemini-2.5-flash",
+    model="gemini-2.0-flash-exp",
     google_api_key=settings.GEMINI_API_KEY,
     temperature=0.1
 )
 
-# 2. Vector Search Tools 정의
+# 2. Vector Search Tools 정의 (product_id 포함)
 @tool
 def search_deposits(query: str) -> str:
     """정기예금 상품을 검색합니다. 사용자가 목돈을 한번에 예치하길 원할 때 유용합니다."""
@@ -39,7 +41,12 @@ def search_deposits(query: str) -> str:
         search_kwargs={'k': 3, 'pre_filter': {'product_type': 'deposit'}}
     )
     docs = retriever.get_relevant_documents(query)
-    return "\n\n".join([doc.page_content for doc in docs])
+    results = []
+    for doc in docs:
+        # MongoDB document ID 포함
+        doc_id = doc.metadata.get('_id', 'unknown')
+        results.append(f"[ID:{doc_id}] {doc.page_content}")
+    return "\n\n".join(results)
 
 @tool
 def search_savings(query: str) -> str:
@@ -48,21 +55,33 @@ def search_savings(query: str) -> str:
         search_kwargs={'k': 3, 'pre_filter': {'product_type': 'saving'}}
     )
     docs = retriever.get_relevant_documents(query)
-    return "\n\n".join([doc.page_content for doc in docs])
+    results = []
+    for doc in docs:
+        doc_id = doc.metadata.get('_id', 'unknown')
+        results.append(f"[ID:{doc_id}] {doc.page_content}")
+    return "\n\n".join(results)
 
 @tool
 def search_annuities(query: str) -> str:
     """연금저축 상품(펀드, 보험 등)을 검색합니다. 사용자가 은퇴 또는 노후 대비를 원할 때 유용합니다."""
     retriever = annuity_vector_store.as_retriever(search_kwargs={'k': 3})
     docs = retriever.get_relevant_documents(query)
-    return "\n\n".join([doc.page_content for doc in docs])
+    results = []
+    for doc in docs:
+        doc_id = doc.metadata.get('_id', 'unknown')
+        results.append(f"[ID:{doc_id}] {doc.page_content}")
+    return "\n\n".join(results)
 
 @tool
 def search_funds(query: str) -> str:
     """일반 펀드 상품을 검색합니다. 사용자가 주식, 채권 등에 투자하여 자산 증식을 원할 때 유용합니다."""
     retriever = fund_vector_store.as_retriever(search_kwargs={'k': 3})
     docs = retriever.get_relevant_documents(query)
-    return "\n\n".join([doc.page_content for doc in docs])
+    results = []
+    for doc in docs:
+        doc_id = doc.metadata.get('_id', 'unknown')
+        results.append(f"[ID:{doc_id}] {doc.page_content}")
+    return "\n\n".join(results)
 
 tools = [search_deposits, search_savings, search_annuities, search_funds]
 
@@ -74,7 +93,7 @@ class AgentState(TypedDict):
     messages: Annotated[Sequence[BaseMessage], operator.add]
     persona: str
 
-# 4. Agent 프롬프트
+# 4. Agent 프롬프트 (product_id 포함하도록 개선)
 SYSTEM_PROMPT = """
 당신은 사용자의 페르소나에 맞춰 금융 상품을 추천하는 전문 AI 어드바이저 '노후하우'입니다.
 
@@ -87,10 +106,12 @@ SYSTEM_PROMPT = """
 - 반드시 3가지 카테고리(예/적금, 연금, 펀드) 각각에 대해 도구를 검색하고 추천해야 합니다.
 - 사용자가 '안정추구형'이면 'search_deposits'나 'search_savings'를, '공격투자형'이면 'search_funds'를 우선적으로 고려하세요.
 - 페르소나에 적합한 상품을 찾지 못하면, 해당 필드는 null로 비워두고 이유는 "추천할 상품을 찾지 못했습니다."라고 명시하세요.
+- Tool 결과에서 [ID:xxx] 형태로 제공된 product_id를 반드시 JSON 응답에 포함하세요.
 
 최종 응답은 다음 JSON 형식으로만 답변하세요:
 {{
   "deposit_or_saving": {{
+    "product_id": "...",
     "product_type": "예금" or "적금",
     "product_name": "...",
     "company_name": "...",
@@ -98,6 +119,7 @@ SYSTEM_PROMPT = """
     "reason": "..."
   }},
   "annuity": {{
+    "product_id": "...",
     "product_type": "연금저축",
     "product_name": "...",
     "company_name": "...",
@@ -105,6 +127,7 @@ SYSTEM_PROMPT = """
     "reason": "..."
   }},
   "fund": {{
+    "product_id": "...",
     "product_type": "펀드",
     "product_name": "...",
     "company_name": "...",
@@ -194,9 +217,6 @@ class RAGService:
             response_text = last_message.content
             
             # 4. JSON 파싱
-            import json
-            import re
-            
             # JSON 부분만 추출
             json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
             if json_match:

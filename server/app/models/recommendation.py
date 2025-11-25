@@ -11,11 +11,18 @@ class RecommendationRequest(BaseModel):
 # (이미지의 포트폴리오 카드 형식)
 
 class RecommendedProduct(BaseModel):
+    product_id: Optional[str] = None  # MongoDB document ID (피드백 추적용)
     product_type: str        # "예금", "적금", "연금저축", "펀드"
     product_name: str        # 상품명 (e.g., "우리SUPER주거래적금")
     company_name: str        # 제공회사 (e.g., "우리은행")
     benefit: str             # 핵심 혜택 요약 (e.g., "최고 연 3.55%")
     reason: str              # (AI 생성) 이 상품을 추천하는 이유
+    
+    # 추가 선택 필드
+    interest_rate: Optional[float] = None  # 금리 (예적금, 연금)
+    return_rate: Optional[float] = None    # 수익률 (펀드)
+    min_amount: Optional[int] = None       # 최소 가입 금액
+    max_amount: Optional[int] = None       # 최대 가입 금액
 
 class RecommendationResponse(BaseModel):
     # 3가지 금융상품을 각각 하나씩 추천
