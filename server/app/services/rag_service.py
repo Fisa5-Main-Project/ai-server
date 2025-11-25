@@ -1,5 +1,7 @@
+"""
+개선된 RAG 서비스 - 사용자 임베딩 기반 추천
+"""
 import asyncio
-from sqlalchemy.orm import Session
 from typing import TypedDict, Annotated, Sequence
 import operator
 
@@ -8,7 +10,7 @@ from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import ToolNode
 
 # --- LangChain Tools & Retrievers ---
-from langchain.tools.retriever import create_retriever_tool
+from langchain_core.tools import tool
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
 
@@ -19,8 +21,8 @@ from app.db.vector_store import (
     deposit_vector_store, saving_vector_store, 
     annuity_vector_store, fund_vector_store
 )
-from app.services.profile_service import profile_service
-from app.models.recommendation import RecommendationResponse
+from app.services.user_vectorization_service import user_vectorization_service
+from app.models.recommendation import RecommendationResponse, RecommendedProduct
 
 # 1. Gemini LLM 모델 초기화
 llm = ChatGoogleGenerativeAI(
@@ -29,34 +31,40 @@ llm = ChatGoogleGenerativeAI(
     temperature=0.1
 )
 
-# 2. Vector Store를 Tool로 변환
-deposit_retriever = deposit_vector_store.as_retriever(search_kwargs={'k': 2})
-saving_retriever = saving_vector_store.as_retriever(search_kwargs={'k': 2})
-annuity_retriever = annuity_vector_store.as_retriever(search_kwargs={'k': 2})
-fund_retriever = fund_vector_store.as_retriever(search_kwargs={'k': 2})
-
-tools = [
-    create_retriever_tool(
-        deposit_retriever,
-        "search_deposits",
-        "정기예금 상품을 검색합니다. 사용자가 목돈을 한번에 예치하길 원할 때 유용합니다."
-    ),
-    create_retriever_tool(
-        saving_retriever,
-        "search_savings",
-        "적금 상품을 검색합니다. 사용자가 매달 꾸준히 돈을 모으길 원할 때 유용합니다."
-    ),
-    create_retriever_tool(
-        annuity_retriever,
-        "search_annuities",
-        "연금저축 상품(펀드, 보험 등)을 검색합니다. 사용자가 은퇴 또는 노후 대비를 원할 때 유용합니다."
-    ),
-    create_retriever_tool(
-        fund_retriever,
-        "search_funds",
-        "일반 펀드 상품을 검색합니다. 사용자가 주식, 채권 등에 투자하여 자산 증식을 원할 때 유용합니다."
+# 2. Vector Search Tools 정의
+@tool
+def search_deposits(query: str) -> str:
+    """정기예금 상품을 검색합니다. 사용자가 목돈을 한번에 예치하길 원할 때 유용합니다."""
+    retriever = deposit_vector_store.as_retriever(
+        search_kwargs={'k': 3, 'pre_filter': {'product_type': 'deposit'}}
     )
-]
+    docs = retriever.get_relevant_documents(query)
+    return "\n\n".join([doc.page_content for doc in docs])
+
+@tool
+def search_savings(query: str) -> str:
+    """적금 상품을 검색합니다. 사용자가 매달 꾸준히 돈을 모으길 원할 때 유용합니다."""
+    retriever = saving_vector_store.as_retriever(
+        search_kwargs={'k': 3, 'pre_filter': {'product_type': 'saving'}}
+    )
+    docs = retriever.get_relevant_documents(query)
+    return "\n\n".join([doc.page_content for doc in docs])
+
+@tool
+def search_annuities(query: str) -> str:
+    """연금저축 상품(펀드, 보험 등)을 검색합니다. 사용자가 은퇴 또는 노후 대비를 원할 때 유용합니다."""
+    retriever = annuity_vector_store.as_retriever(search_kwargs={'k': 3})
+    docs = retriever.get_relevant_documents(query)
+    return "\n\n".join([doc.page_content for doc in docs])
+
+@tool
+def search_funds(query: str) -> str:
+    """일반 펀드 상품을 검색합니다. 사용자가 주식, 채권 등에 투자하여 자산 증식을 원할 때 유용합니다."""
+    retriever = fund_vector_store.as_retriever(search_kwargs={'k': 3})
+    docs = retriever.get_relevant_documents(query)
+    return "\n\n".join([doc.page_content for doc in docs])
+
+tools = [search_deposits, search_savings, search_annuities, search_funds]
 
 # LLM에 tool 바인딩
 llm_with_tools = llm.bind_tools(tools)
@@ -82,9 +90,27 @@ SYSTEM_PROMPT = """
 
 최종 응답은 다음 JSON 형식으로만 답변하세요:
 {{
-  "deposit_or_saving": {{"product_name": "...", "reason": "..."}},
-  "annuity": {{"product_name": "...", "reason": "..."}},
-  "fund": {{"product_name": "...", "reason": "..."}}
+  "deposit_or_saving": {{
+    "product_type": "예금" or "적금",
+    "product_name": "...",
+    "company_name": "...",
+    "benefit": "최고 연 X.X%",
+    "reason": "..."
+  }},
+  "annuity": {{
+    "product_type": "연금저축",
+    "product_name": "...",
+    "company_name": "...",
+    "benefit": "세액공제 16.5%",
+    "reason": "..."
+  }},
+  "fund": {{
+    "product_type": "펀드",
+    "product_name": "...",
+    "company_name": "...",
+    "benefit": "수익률 12.3%",
+    "reason": "..."
+  }}
 }}
 """
 
@@ -139,11 +165,22 @@ agent_graph = workflow.compile()
 
 # 7. RAG 서비스 클래스
 class RAGService:
-    async def get_recommendations(self, db: Session, user_id: int) -> RecommendationResponse:
-        """1. 페르소나 생성 -> 2. Agent 실행 -> 3. JSON 파싱 -> 4. 반환"""
+    async def get_recommendations(self, user_id: int) -> RecommendationResponse:
+        """사용자 임베딩 기반 금융상품 추천"""
         
-        # 1. 사용자 페르소나 생성
-        persona = profile_service.get_user_persona(db, user_id)
+        # 1. 사용자 페르소나 가져오기
+        user_vector = user_vectorization_service.user_vectors_collection.find_one(
+            {"_id": f"user_{user_id}"}
+        )
+        
+        if not user_vector:
+            # 사용자 벡터가 없으면 먼저 벡터화 실행
+            await user_vectorization_service.vectorize_user(user_id)
+            user_vector = user_vectorization_service.user_vectors_collection.find_one(
+                {"_id": f"user_{user_id}"}
+            )
+        
+        persona = user_vector["persona_text"]
         
         try:
             # 2. Agent Graph 실행
@@ -156,7 +193,7 @@ class RAGService:
             last_message = result["messages"][-1]
             response_text = last_message.content
             
-            # 4. JSON 파싱 (간단한 방법)
+            # 4. JSON 파싱
             import json
             import re
             
@@ -166,10 +203,23 @@ class RAGService:
                 json_str = json_match.group()
                 data = json.loads(json_str)
                 
+                # RecommendedProduct 객체로 변환
+                deposit_or_saving = None
+                if data.get("deposit_or_saving"):
+                    deposit_or_saving = RecommendedProduct(**data["deposit_or_saving"])
+                
+                annuity = None
+                if data.get("annuity"):
+                    annuity = RecommendedProduct(**data["annuity"])
+                
+                fund = None
+                if data.get("fund"):
+                    fund = RecommendedProduct(**data["fund"])
+                
                 return RecommendationResponse(
-                    deposit_or_saving=data.get("deposit_or_saving"),
-                    annuity=data.get("annuity"),
-                    fund=data.get("fund")
+                    deposit_or_saving=deposit_or_saving,
+                    annuity=annuity,
+                    fund=fund
                 )
             else:
                 print(f"JSON 형식을 찾을 수 없습니다: {response_text}")
