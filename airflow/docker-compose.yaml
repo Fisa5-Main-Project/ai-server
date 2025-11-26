@@ -76,8 +76,12 @@ x-airflow-common: &airflow-common
         AIRFLOW_VAR_FSC_API_KEY: ${FSC_API_KEY}
         AIRFLOW_VAR_FSS_API_KEY: ${FSS_API_KEY}
         AIRFLOW_VAR_KVIC_API_KEY: ${KVIC_API_KEY}
-        AIRFLOW_VAR_DB_NAME: ${DB_NAME}
+        AIRFLOW_VAR_DB_NAME: ${MONGO_DB_NAME}
         AIRFLOW_VAR_GEMINI_API_KEY: ${GEMINI_API_KEY}
+        # MongoDB 연결 정보 (core/config.py와 일치)
+        AIRFLOW_VAR_MONGO_USERNAME: ${MONGO_USERNAME}
+        AIRFLOW_VAR_MONGO_PASSWORD: ${MONGO_PASSWORD}
+        AIRFLOW_VAR_MONGO_HOST: ${MONGO_HOST}
     volumes:
         - ${AIRFLOW_PROJ_DIR:-.}/dags:/opt/airflow/dags
         - ${AIRFLOW_PROJ_DIR:-.}/logs:/opt/airflow/logs

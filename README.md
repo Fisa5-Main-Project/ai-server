@@ -77,3 +77,8 @@ See our [CONTRIBUTING.md](CONTRIBUTING.md) guide.
 ## License
 
 MongoDB Atlas CLI is released under the Apache 2.0 license. See [LICENSE](LICENSE)
+
+## 서버 실행 방법(local)
+
+python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+

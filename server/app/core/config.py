@@ -18,11 +18,12 @@ class Settings(BaseSettings):
     @property
     def MONGO_DB_URL(self):
         return f"mongodb+srv://{self.MONGO_USERNAME}:{self.MONGO_PASSWORD}@{self.MONGO_HOST}"
+    
+    @property
+    def DB_NAME(self):
+        """MongoDB 데이터베이스 이름"""
+        return self.MONGO_DB_NAME
     # 3. MySQL (User Profile DB) 설정
     MYSQL_DB_URL: str
    
-    # 4. Spring Boot API URL
-    SPRING_BOOT_API_URL: str = "http://localhost:8060"
-   
-    # (API 키는 Airflow Variables에서만 사용하므로 여기서는 제거)
 settings = Settings()
