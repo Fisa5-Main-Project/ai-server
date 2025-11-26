@@ -1,8 +1,7 @@
 """
 사용자 벡터화 서비스
-Spring Boot API에서 사용자 정보를 가져와 임베딩 생성 후 MongoDB에 저장
+MySQL DB에서 사용자 정보를 직접 조회하여 임베딩 생성 후 MongoDB에 저장
 """
-import httpx
 from app.core.config import settings
 from app.services.embedding import embeddings
 from pymongo import MongoClient
@@ -11,9 +10,8 @@ from datetime import datetime
 
 class UserVectorizationService:
     def __init__(self):
-        self.spring_boot_url = settings.SPRING_BOOT_API_URL
         self.mongo_client = MongoClient(settings.MONGO_DB_URL)
-        self.db = self.mongo_client[settings.MONGO_DB_NAME]
+        self.db = self.mongo_client[settings.DB_NAME]
         self.user_vectors_collection = self.db["user_vectors"]
     
     def get_user_data_from_db(self, user_id: int) -> dict:

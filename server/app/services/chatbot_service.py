@@ -24,7 +24,7 @@ from app.services.user_vectorization_service import user_vectorization_service
 class ChatbotService:
     def __init__(self):
         self.llm = ChatGoogleGenerativeAI(
-            model="gemini-2.5-flash",
+            model="gemini-2.0-flash",
             google_api_key=settings.GEMINI_API_KEY,
             temperature=0.3,
             streaming=True
