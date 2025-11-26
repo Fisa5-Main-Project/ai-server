@@ -4,7 +4,6 @@ from typing import List, Optional
 # --- Request Models ---
 
 class RecommendationRequest(BaseModel):
-    # Spring Boot는 user_id만 넘겨주면 됩니다.
     user_id: int
 
 # --- Response Models ---

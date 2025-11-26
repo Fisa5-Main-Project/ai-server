@@ -55,17 +55,29 @@ class UserVectorizationService:
             asset_query = text("SELECT type, balance FROM assets WHERE user_id = :user_id")
             asset_results = conn.execute(asset_query, {"user_id": user_id}).mappings().all()
             
+            # 5. Pension 상세 정보 조회 (연금 자산이 있는 경우)
+            pension_query = text("""
+                SELECT p.* 
+                FROM pension p
+                JOIN assets a ON p.asset_id = a.asset_id
+                WHERE a.user_id = :user_id AND a.type = 'PENSION'
+            """)
+            pension_results = conn.execute(pension_query, {"user_id": user_id}).mappings().all()
+            
             # 데이터 구조 변환
             user_data = {
                 "user": dict(user_result),
                 "user_info": dict(info_result) if info_result else {},
                 "keywords": [{"name": row["name"]} for row in keyword_results],
-                "assets": [{"type": row["type"], "balance": float(row["balance"])} for row in asset_results]
+                "assets": [{"type": row["type"], "balance": float(row["balance"])} for row in asset_results],
+                "pensions": [dict(row) for row in pension_results]
             }
             
             # 날짜/Enum 타입 문자열 변환
             if user_data["user"].get("birth"):
                 user_data["user"]["birth"] = str(user_data["user"]["birth"])
+            if user_data["user_info"].get("goal_target_date"):
+                user_data["user_info"]["goal_target_date"] = str(user_data["user_info"]["goal_target_date"])
             
             return user_data
 
@@ -75,6 +87,7 @@ class UserVectorizationService:
         user_info = user_data.get("user_info", {})
         keywords = user_data.get("keywords", [])
         assets = user_data.get("assets", [])
+        pensions = user_data.get("pensions", [])
         
         # 나이 계산
         from datetime import datetime
@@ -86,11 +99,34 @@ class UserVectorizationService:
         persona_parts = []
         
         # 1. 기본 정보
-        persona_parts.append(f"{age}세 {user['gender']} 사용자")
+        gender_kr = "남성" if user['gender'] == "M" else "여성"
+        persona_parts.append(f"{age}세 {gender_kr}")
+        
+        # 투자 성향
         if user.get('investment_tendancy'):
             persona_parts.append(f"투자 성향: {user['investment_tendancy']}")
         
-        # 2. 자산 정보 (상세 분포 포함)
+        # 2. 가족 상황
+        if user_info.get("num_dependents") is not None:
+            dependents = user_info["num_dependents"]
+            if dependents > 0:
+                persona_parts.append(f"부양가족 {dependents}명")
+            else:
+                persona_parts.append("부양가족 없음")
+        
+        # 은퇴 상태
+        if user_info.get("retirement_status") is not None:
+            if user_info["retirement_status"]:
+                persona_parts.append("은퇴 상태")
+            else:
+                if user_info.get("target_retired_age") and user_info["target_retired_age"] > 0:
+                    years_to_retire = user_info["target_retired_age"] - age
+                    if years_to_retire > 0:
+                        persona_parts.append(f"은퇴까지 {years_to_retire}년 남음 (목표: {user_info['target_retired_age']}세)")
+                    else:
+                        persona_parts.append(f"희망 은퇴 나이: {user_info['target_retired_age']}세")
+        
+        # 3. 자산 정보 (상세 분포 포함)
         if user.get("asset_total"):
             total_asset = float(user["asset_total"])
             asset_billion = total_asset / 100000000
@@ -125,24 +161,51 @@ class UserVectorizationService:
             else:
                 persona_parts.append(f"총 자산: {asset_billion:.1f}억원")
         
-        # 3. 상세 정보 (소득, 생활비, 목표)
+        # 4. 연금 상세 정보
+        if pensions:
+            pension_info = []
+            pension_type_map = {"DB": "확정급여형", "DC": "확정기여형", "IRP": "개인형퇴직연금"}
+            for pension in pensions:
+                if pension.get("pension_type"):
+                    p_type = pension_type_map.get(pension["pension_type"], pension["pension_type"])
+                    pension_info.append(p_type)
+                if pension.get("contrib_year"):
+                    pension_info.append(f"가입 {pension['contrib_year']}년차")
+            if pension_info:
+                persona_parts.append(f"연금 정보: {', '.join(pension_info)}")
+        
+        # 5. 소득 및 지출 정보
         if user_info:
             if user_info.get("annual_income"):
                 income_million = float(user_info["annual_income"]) / 10000
                 persona_parts.append(f"연 소득: {income_million:.0f}만원")
             
+            if user_info.get("fixed_monthly_cost"):
+                fixed_cost = float(user_info["fixed_monthly_cost"]) / 10000
+                persona_parts.append(f"월 고정지출: {fixed_cost:.0f}만원")
+            
             if user_info.get("expectation_monthly_cost"):
                 monthly_cost = float(user_info["expectation_monthly_cost"]) / 10000
                 persona_parts.append(f"은퇴 후 희망 월 생활비: {monthly_cost:.0f}만원")
-            
-            if user_info.get("target_retired_age") and user_info["target_retired_age"] > 0:
-                persona_parts.append(f"희망 은퇴 나이: {user_info['target_retired_age']}세")
-            
+        
+        # 6. 재무 목표
+        if user_info:
             if user_info.get("goal_amount"):
                 goal_billion = float(user_info["goal_amount"]) / 100000000
-                persona_parts.append(f"목표 자산: {goal_billion:.1f}억원")
+                goal_parts = [f"목표 자산: {goal_billion:.1f}억원"]
+                
+                if user_info.get("goal_target_date"):
+                    try:
+                        target_date = datetime.strptime(str(user_info["goal_target_date"]), "%Y-%m-%d")
+                        years_to_goal = target_date.year - datetime.now().year
+                        if years_to_goal > 0:
+                            goal_parts.append(f"{years_to_goal}년 후 달성 목표")
+                    except:
+                        pass
+                
+                persona_parts.append(", ".join(goal_parts))
         
-        # 4. 은퇴 후 희망 키워드
+        # 7. 은퇴 후 희망 키워드
         if keywords:
             keyword_names = [kw["name"] for kw in keywords]
             persona_parts.append(f"관심 키워드: {', '.join(keyword_names)}")
@@ -153,33 +216,13 @@ class UserVectorizationService:
     async def vectorize_user(self, user_id: int) -> dict:
         """사용자 벡터화 실행"""
         try:
-            # 1. DB에서 사용자 데이터 가져오기 (Spring Boot API 대신 직접 조회)
+            # 1. DB에서 사용자 데이터 가져오기
             try:
                 user_data = self.get_user_data_from_db(user_id)
                 print(f"[User {user_id}] DB 조회 성공")
             except Exception as db_error:
                 print(f"[User {user_id}] DB 조회 실패: {db_error}")
-                # DB 조회 실패 시 더미 데이터 사용 (테스트용)
-                print(f"[User {user_id}] 더미 데이터 사용")
-                user_data = {
-                    "user": {
-                        "birth": "2001-03-24",
-                        "gender": "M",
-                        "investment_tendancy": "안정추구형",
-                        "asset_total": 711200000
-                    },
-                    "user_info": {
-                        "annual_income": 1332,
-                        "expectation_monthly_cost": 333333,
-                        "target_retired_age": 65,
-                        "goal_amount": 1000000000
-                    },
-                    "keywords": [
-                        {"name": "안정적 생활비"},
-                        {"name": "여행"},
-                        {"name": "가족/교류"}
-                    ]
-                }
+                raise
             
             # 2. 페르소나 텍스트 생성
             persona_text = self.generate_persona_text(user_data)
@@ -204,6 +247,7 @@ class UserVectorizationService:
             )
             
             print(f"[User {user_id}] 벡터화 완료")
+            print(f"[Persona] {persona_text}")
             
             return {
                 "user_id": user_id,
