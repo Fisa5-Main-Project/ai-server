@@ -35,12 +35,13 @@ llm = ChatGoogleGenerativeAI(
 
 # 2. Vector Search Tools 정의 (product_id 포함)
 @tool
-def search_deposits(query: str) -> str:
+async def search_deposits(query: str) -> str:
     """정기예금 상품을 검색합니다. 사용자가 목돈을 한번에 예치하길 원할 때 유용합니다."""
     retriever = deposit_vector_store.as_retriever(
         search_kwargs={'k': 3, 'pre_filter': {'product_type': 'deposit'}}
     )
-    docs = retriever.get_relevant_documents(query)
+    # docs = retriever.get_relevant_documents(query)
+    docs = await retriever.ainvoke(query)
     results = []
     for doc in docs:
         # MongoDB document ID 포함
@@ -49,12 +50,13 @@ def search_deposits(query: str) -> str:
     return "\n\n".join(results)
 
 @tool
-def search_savings(query: str) -> str:
+async def search_savings(query: str) -> str:
     """적금 상품을 검색합니다. 사용자가 매달 꾸준히 돈을 모으길 원할 때 유용합니다."""
     retriever = saving_vector_store.as_retriever(
         search_kwargs={'k': 3, 'pre_filter': {'product_type': 'saving'}}
     )
-    docs = retriever.get_relevant_documents(query)
+    # docs = retriever.get_relevant_documents(query)
+    docs = await retriever.ainvoke(query)
     results = []
     for doc in docs:
         doc_id = doc.metadata.get('_id', 'unknown')
@@ -62,10 +64,11 @@ def search_savings(query: str) -> str:
     return "\n\n".join(results)
 
 @tool
-def search_annuities(query: str) -> str:
+async def search_annuities(query: str) -> str:
     """연금저축 상품(펀드, 보험 등)을 검색합니다. 사용자가 은퇴 또는 노후 대비를 원할 때 유용합니다."""
     retriever = annuity_vector_store.as_retriever(search_kwargs={'k': 3})
-    docs = retriever.get_relevant_documents(query)
+    # docs = retriever.get_relevant_documents(query)
+    docs = await retriever.ainvoke(query)
     results = []
     for doc in docs:
         doc_id = doc.metadata.get('_id', 'unknown')
@@ -73,10 +76,11 @@ def search_annuities(query: str) -> str:
     return "\n\n".join(results)
 
 @tool
-def search_funds(query: str) -> str:
+async def search_funds(query: str) -> str:
     """일반 펀드 상품을 검색합니다. 사용자가 주식, 채권 등에 투자하여 자산 증식을 원할 때 유용합니다."""
     retriever = fund_vector_store.as_retriever(search_kwargs={'k': 3})
-    docs = retriever.get_relevant_documents(query)
+    # docs = retriever.get_relevant_documents(query)
+    docs = await retriever.ainvoke(query)
     results = []
     for doc in docs:
         doc_id = doc.metadata.get('_id', 'unknown')
@@ -212,9 +216,11 @@ class RAGService:
                 "persona": persona
             })
             
+            
             # 3. 마지막 메시지에서 JSON 추출
             last_message = result["messages"][-1]
             response_text = last_message.content
+            
             
             # 4. JSON 파싱
             # JSON 부분만 추출
@@ -222,6 +228,7 @@ class RAGService:
             if json_match:
                 json_str = json_match.group()
                 data = json.loads(json_str)
+                
                 
                 # RecommendedProduct 객체로 변환
                 deposit_or_saving = None
