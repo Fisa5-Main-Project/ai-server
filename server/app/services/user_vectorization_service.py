@@ -5,7 +5,7 @@ MySQL DB에서 사용자 정보를 직접 조회하여 임베딩 생성 후 Mong
 from app.core.config import settings
 from app.services.embedding import embeddings
 from pymongo import MongoClient
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class UserVectorizationService:
@@ -236,8 +236,8 @@ class UserVectorizationService:
                 "user_id": user_id,
                 "persona_text": persona_text,
                 "embedding": embedding_vector,
-                "created_at": datetime.utcnow(),
-                "updated_at": datetime.utcnow()
+                "created_at": datetime.now(timezone.utc),
+                "updated_at": datetime.now(timezone.utc)
             }
             
             self.user_vectors_collection.update_one(

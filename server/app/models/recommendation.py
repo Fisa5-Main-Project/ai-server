@@ -11,11 +11,11 @@ class RecommendationRequest(BaseModel):
 
 class RecommendedProduct(BaseModel):
     product_id: Optional[str] = None  # MongoDB document ID (피드백 추적용)
-    product_type: str        # "예금", "적금", "연금저축", "펀드"
-    product_name: str        # 상품명 (e.g., "우리SUPER주거래적금")
-    company_name: str        # 제공회사 (e.g., "우리은행")
-    benefit: str             # 핵심 혜택 요약 (e.g., "최고 연 3.55%")
-    reason: str              # (AI 생성) 이 상품을 추천하는 이유
+    product_type: Optional[str] = None        # "예금", "적금", "연금저축", "펀드"
+    product_name: Optional[str] = None         # 상품명 (e.g., "우리SUPER주거래적금")
+    company_name: Optional[str] = None         # 제공회사 (e.g., "우리은행")
+    benefit: Optional[str] = None              # 핵심 혜택 요약 (e.g., "최고 연 3.55%")
+    reason: Optional[str] = None               # (AI 생성) 이 상품을 추천하는 이유
     
     # 추가 선택 필드
     interest_rate: Optional[float] = None  # 금리 (예적금, 연금)
