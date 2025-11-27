@@ -72,13 +72,12 @@ x-airflow-common: &airflow-common
         _PIP_ADDITIONAL_REQUIREMENTS: ''
         # The following line can be used to set a custom config file, stored in the local config folder
         AIRFLOW_CONFIG: '/opt/airflow/config/airflow.cfg'
-        # [Custom] Airflow Variables Mapping
         AIRFLOW_VAR_FSC_API_KEY: ${FSC_API_KEY}
         AIRFLOW_VAR_FSS_API_KEY: ${FSS_API_KEY}
         AIRFLOW_VAR_KVIC_API_KEY: ${KVIC_API_KEY}
-        AIRFLOW_VAR_DB_NAME: ${MONGO_DB_NAME}
         AIRFLOW_VAR_GEMINI_API_KEY: ${GEMINI_API_KEY}
-        # MongoDB 연결 정보 (core/config.py와 일치)
+        SOLAR_API_KEY: ${SOLAR_API_KEY}
+        AIRFLOW_VAR_SOLAR_API_KEY: ${SOLAR_API_KEY}
         AIRFLOW_VAR_MONGO_USERNAME: ${MONGO_USERNAME}
         AIRFLOW_VAR_MONGO_PASSWORD: ${MONGO_PASSWORD}
         AIRFLOW_VAR_MONGO_HOST: ${MONGO_HOST}

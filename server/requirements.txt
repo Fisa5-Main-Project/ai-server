@@ -1,51 +1,33 @@
-# FastAPI & Server
-fastapi>=0.115.0
-uvicorn[standard]>=0.30.0
-
+fastapi
+uvicorn
+pydantic
+pydantic-settings
+python-dotenv
+motor
+pymongo
 # --- LangChain Core ---
-langchain>=0.3.0
-langchain-core>=0.3.0
-langchain-community>=0.3.0
+langchain>=0.2.0
+langchain-community>=0.2.0
+langchain-core>=0.2.0
+langchain-text-splitters>=0.2.0
 
-# --- LangChain LLM Provider ---
+# --- LangChain LLM Providers ---
 langchain-google-genai>=2.0.0
 google-generativeai>=0.8.0
-langchain-voyageai>=0.1.0
+langchain-groq>=0.2.0
+groq>=0.9.0
+# langchain-upstage>=0.2.0  <-- Removed
+
+# --- Local Embeddings ---
+sentence-transformers
 
 # --- LangGraph (Agent Framework) ---
 langgraph>=0.2.0
 
-# --- LangChain VectorDB ---
-langchain-mongodb>=0.2.0
-pymongo>=4.8.0
-# FastAPI & Server
-fastapi>=0.115.0
-uvicorn[standard]>=0.30.0
+# --- Vector Store ---
+langchain-mongodb>=0.1.0
 
-# --- LangChain Core ---
-langchain>=0.3.0
-langchain-core>=0.3.0
-langchain-community>=0.3.0
-
-# --- LangChain LLM Provider ---
-langchain-google-genai>=2.0.0
-google-generativeai>=0.8.0
-langchain-voyageai>=0.1.0
-
-# --- LangGraph (Agent Framework) ---
-langgraph>=0.2.0
-
-# --- LangChain VectorDB ---
-langchain-mongodb>=0.2.0
-pymongo>=4.8.0
-
-# --- DB Drivers ---
-sqlalchemy>=2.0.0
-pymysql>=1.1.0
-cryptography>=42.0.0
-
-# --- Config & Utils ---
-pydantic>=2.0.0
-pydantic-settings>=2.0.0
-python-dotenv>=1.0.0
-httpx>=0.27.0
+# --- Utils ---
+requests
+httpx
+jinja2

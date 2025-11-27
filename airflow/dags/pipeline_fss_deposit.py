@@ -31,12 +31,10 @@ def fss_deposit_pipeline():
 
     @task(task_id="embed_deposit")
     def embed(mongo_docs: list):
-        # Voyage AI 임베딩 추가
         return add_embeddings_to_docs(mongo_docs)
 
     @task(task_id="load_deposit")
     def load(mongo_docs: list):
-        # [수정] DB 연결 정보 조회를 Task 실행 시점으로 이동
         try:
             mongo_url = get_mongo_db_url()
             db_name = Variable.get("DB_NAME")

@@ -6,13 +6,13 @@ from typing import List, Dict, Optional
 from datetime import datetime
 from pymongo import MongoClient
 from langchain_core.messages import HumanMessage, AIMessage, BaseMessage, SystemMessage
-from langchain_google_genai import ChatGoogleGenerativeAI
 from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import ToolNode
 from typing import TypedDict, Annotated, Sequence
 import operator
 import json
 
+from app.core.llm_factory import LLMFactory
 from app.core.config import settings
 from app.db.vector_store import (
     deposit_vector_store, saving_vector_store,
@@ -23,12 +23,14 @@ from app.services.user_vectorization_service import user_vectorization_service
 
 class ChatbotService:
     def __init__(self):
-        self.llm = ChatGoogleGenerativeAI(
-            model="gemini-2.0-flash",
-            google_api_key=settings.GEMINI_API_KEY,
-            temperature=0.3,
-            streaming=True
-        )
+        # Use factory to create chatbot LLM with streaming
+        self.llm = LLMFactory.create_chatbot_llm()
+        
+        self.mongo_client = MongoClient(settings.MONGO_DB_URL)
+        self.db = self.mongo_client[settings.MONGO_DB_NAME]
+        self.chat_logs_collection = self.db["chat_logs"]
+        self.chat_history_collection = self.db["chat_history"]
+
         
         self.mongo_client = MongoClient(settings.MONGO_DB_URL)
         self.db = self.mongo_client[settings.MONGO_DB_NAME]

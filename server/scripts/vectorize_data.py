@@ -2,20 +2,19 @@ import os
 import sys
 import time
 from pymongo import MongoClient
-from langchain_voyageai import VoyageAIEmbeddings
 from dotenv import load_dotenv
 
 # Add server directory to sys.path to import app modules
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
+from app.core.config import settings
+from app.core.llm_factory import LLMFactory
+
 # Load environment variables
 load_dotenv()
 
-# Initialize Embedding Model
-embeddings = VoyageAIEmbeddings(
-    model="voyage-large-2",
-    voyage_api_key=os.getenv("VOYAGE_API_KEY") 
-)
+# Initialize Embedding Model (Local via LLMFactory)
+embeddings = LLMFactory.create_embeddings()
 
 def create_vector_index(db, collection_name):
     """Creates a vector search index for the collection."""
@@ -27,7 +26,7 @@ def create_vector_index(db, collection_name):
                 {
                     "type": "vector",
                     "path": "embedding",
-                    "numDimensions": 1024,
+                    "numDimensions": 1024,  # Local BGE-m3-ko Dimension
                     "similarity": "cosine"
                 },
                 {
@@ -42,6 +41,8 @@ def create_vector_index(db, collection_name):
         indexes = list(db[collection_name].list_search_indexes())
         if any(idx['name'] == 'vector_index' for idx in indexes):
             print(f"[{collection_name}] Vector index 'vector_index' already exists.")
+            # Note: If dimension changed, user might need to drop and recreate index manually or we can add logic here.
+            # For now, just printing existence.
             return
 
         print(f"[{collection_name}] Creating vector index...")
@@ -73,7 +74,7 @@ def vectorize_collection(db, collection_name):
             count += len(batch_docs)
             print(f"[{collection_name}] Processed {count}/{total_docs}...")
             batch_docs = []
-            time.sleep(1)
+            time.sleep(0.5) # Rate limit precaution
             
     if batch_docs:
         process_batch(collection, batch_docs)
@@ -94,21 +95,16 @@ def process_batch(collection, docs):
         print(f"Error embedding batch: {e}")
 
 def main():
-    MONGO_DB_URL = os.getenv("MONGO_DB_URL")
-    DB_NAME = os.getenv("DB_NAME", "financial_products")
-    VOYAGE_API_KEY = os.getenv("VOYAGE_API_KEY")
-
-    if not MONGO_DB_URL:
+    # Settings from config.py are used, but we can fallback or check envs if needed.
+    # LLMFactory uses settings.SOLAR_API_KEY
+    
+    if not settings.MONGO_DB_URL:
         print("Error: MONGO_DB_URL is missing.")
         sys.exit(1)
 
-    if not VOYAGE_API_KEY or VOYAGE_API_KEY == "YOUR_VOYAGE_API_KEY":
-        print("Error: VOYAGE_API_KEY is missing or not set.")
-        sys.exit(1)
-
-    print(f"Connecting to MongoDB at {MONGO_DB_URL}...")
-    client = MongoClient(MONGO_DB_URL)
-    db = client[DB_NAME]
+    print(f"Connecting to MongoDB...")
+    client = MongoClient(settings.MONGO_DB_URL)
+    db = client[settings.DB_NAME]
     
     collections = [
         "products_deposit",

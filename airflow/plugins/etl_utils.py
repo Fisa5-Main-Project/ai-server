@@ -4,7 +4,6 @@ import re
 import time
 from pymongo import MongoClient
 from airflow.models.variable import Variable
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
 
 # --- [E] Extract Functions ---
 
@@ -134,62 +133,52 @@ def fetch_fsc_funds(api_key: str, target_date: str):
 
 # --- [Embed] Embedding Functions ---
 
-def get_gemini_embeddings(texts: list[str], model: str = "models/text-embedding-004") -> list[list[float]]:
-    """Gemini(LangChain)를 사용하여 텍스트 리스트의 임베딩을 생성합니다."""
+def get_local_embeddings(texts: list[str], model_name: str = "dragonkue/BGE-m3-ko") -> list[list[float]]:
+    """Local BGE-m3-ko 임베딩 (1024차원)"""
     if not texts:
         return []
     
-    api_key = Variable.get("GEMINI_API_KEY")
-    
     try:
-        # GoogleGenerativeAIEmbeddings 초기화
-        embeddings_model = GoogleGenerativeAIEmbeddings(
-            model=model,
-            google_api_key=api_key
-        )
-        
-        # 임베딩 생성
-        embeddings = embeddings_model.embed_documents(texts)
-        return embeddings
-    except Exception as e:
-        print(f"Gemini 임베딩 생성 실패: {e}")
-        raise
+        from sentence_transformers import SentenceTransformer
+    except ImportError:
+        raise ImportError("sentence-transformers 패키지 미설치. pip install sentence-transformers")
 
-def add_embeddings_to_docs(mongo_docs: list, batch_size: int = 5):
+    # 모델 로드 (Airflow Worker 환경 고려)
+    model = SentenceTransformer(model_name)
+    
+    embeddings = model.encode(texts)
+    embeddings_list = embeddings.tolist()
+    
+    # [수정] 벡터 데이터 출력 방지를 위해 차원 정보만 간단히 출력하거나 제거
+    if embeddings_list:
+        print(f"임베딩 생성 완료: {len(embeddings_list)}건 (차원: {len(embeddings_list[0])})")
+        
+    return embeddings_list
+
+def add_embeddings_to_docs(mongo_docs: list, batch_size: int = 10):
     """MongoDB 문서 리스트의 'rag_text' 필드를 임베딩하여 'embedding' 필드에 추가합니다."""
     if not mongo_docs:
         return mongo_docs
 
     print(f"임베딩 생성 시작: 총 {len(mongo_docs)}개 문서 (Batch Size: {batch_size})")
     
-    # 임베딩 대상 텍스트 추출
     texts_to_embed = [doc.get("rag_text", "") for doc in mongo_docs]
-    
     all_embeddings = []
     total_docs = len(texts_to_embed)
     
-    # Batch 처리
     for i in range(0, total_docs, batch_size):
         batch_texts = texts_to_embed[i : i + batch_size]
-        max_retries = 3
-        for attempt in range(max_retries):
-            try:
-                embeddings = get_gemini_embeddings(batch_texts)
-                all_embeddings.extend(embeddings)
-                print(f"임베딩 진행 중: {min(i + batch_size, total_docs)}/{total_docs} 완료")
-                time.sleep(3.0) # 기본 대기 시간
-                break # 성공 시 retry 루프 탈출
-            except Exception as e:
-                error_msg = str(e)
-                if "429" in error_msg and attempt < max_retries - 1:
-                    wait_time = (attempt + 1) * 30 # 30초, 60초 대기
-                    print(f"Rate Limit (429) 발생. {wait_time}초 후 재시도합니다... (시도 {attempt + 1}/{max_retries})")
-                    time.sleep(wait_time)
-                else:
-                    print(f"Batch {i} 처리 중 오류 발생 (시도 {attempt + 1}/{max_retries}): {e}")
-                    raise
+        try:
+            embeddings = get_local_embeddings(batch_texts)
+            all_embeddings.extend(embeddings)
+            
+            # 진행 상황만 출력 (벡터 출력 없음)
+            print(f"임베딩 진행 중: {min(i + batch_size, total_docs)}/{total_docs} 완료")
+            time.sleep(0.5) 
+        except Exception as e:
+            print(f"Batch {i} 처리 중 오류 발생: {e}")
+            raise
 
-    # 문서에 임베딩 추가
     for doc, embedding in zip(mongo_docs, all_embeddings):
         doc["embedding"] = embedding
         
@@ -216,12 +205,15 @@ def load_to_mongo(mongo_url: str, db_name: str, collection_name: str, mongo_docs
         upsert_count = 0
         for doc in mongo_docs:
             if not doc.get("_id"):
-                print(f"ID가 없는 문서 발견, 건너뜁니다: {doc}")
+                # [수정] doc 전체를 출력하면 임베딩 벡터까지 출력되므로, 식별 가능한 정보만 출력
+                safe_info = {k: v for k, v in doc.items() if k in ['fin_prdt_cd', 'fin_prdt_nm', 'product_type']}
+                print(f"ID가 없는 문서 발견, 건너뜁니다: {safe_info}")
                 continue
+            
             collection.update_one(
-                {"_id": doc["_id"]}, # Filter
-                {"$set": doc},       # Update/Set data
-                upsert=True          # Insert if not exists
+                {"_id": doc["_id"]}, 
+                {"$set": doc},       
+                upsert=True          
             )
             upsert_count += 1
             

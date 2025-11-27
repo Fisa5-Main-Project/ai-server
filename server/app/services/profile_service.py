@@ -52,7 +52,7 @@ class ProfileService:
         )
 
         
-        print(f"생성된 페르sona: {persona}")
+        print(f"생성된 페르소나: {persona}")
         return persona
 
 profile_service = ProfileService()

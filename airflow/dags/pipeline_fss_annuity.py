@@ -31,17 +31,14 @@ def fss_annuity_pipeline():
 
     @task(task_id="embed_annuity")
     def embed(mongo_docs: list):
-        # Voyage AI 임베딩 추가
         return add_embeddings_to_docs(mongo_docs)
 
     @task(task_id="load_annuity")
     def load(mongo_docs: list):
-        # [수정] DB 연결 정보 조회도 실행 시점(Task 내부)에 수행
         try:
             mongo_url = get_mongo_db_url()
             db_name = Variable.get("DB_NAME")
         except KeyError:
-            # 변수가 없으면 기본값 설정 (안전장치)
             db_name = "financial_products" 
             
         return load_to_mongo(mongo_url, db_name, "products_annuity", mongo_docs, "annuity")

@@ -17,7 +17,6 @@ def fss_saving_pipeline():
     
     @task(task_id="extract_saving")
     def extract():
-        # [수정] 변수 로드를 Task 실행 시점으로 이동
         try:
             api_key = Variable.get("FSS_API_KEY")
         except KeyError:
@@ -34,12 +33,10 @@ def fss_saving_pipeline():
 
     @task(task_id="embed_saving")
     def embed(mongo_docs: list):
-        # Voyage AI 임베딩 추가
         return add_embeddings_to_docs(mongo_docs)
 
     @task(task_id="load_saving")
     def load(mongo_docs: list):
-        # [수정] DB 연결 설정을 Task 실행 시점으로 이동
         try:
             mongo_url = get_mongo_db_url()
             db_name = Variable.get("DB_NAME")
