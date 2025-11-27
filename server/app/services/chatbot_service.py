@@ -6,7 +6,7 @@ from typing import List, Dict, Optional
 from datetime import datetime
 from pymongo import MongoClient
 from langchain_core.messages import HumanMessage, AIMessage, BaseMessage, SystemMessage
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_core.messages import HumanMessage, AIMessage, BaseMessage, SystemMessage
 from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import ToolNode
 from typing import TypedDict, Annotated, Sequence
@@ -21,14 +21,11 @@ from app.db.vector_store import (
 from app.services.user_vectorization_service import user_vectorization_service
 
 
+from app.core.llm_factory import get_llm
+
 class ChatbotService:
     def __init__(self):
-        self.llm = ChatGoogleGenerativeAI(
-            model="gemini-2.0-flash",
-            google_api_key=settings.GEMINI_API_KEY,
-            temperature=0.3,
-            streaming=True
-        )
+        self.llm = get_llm(temperature=0.3, streaming=True)
         
         self.mongo_client = MongoClient(settings.MONGO_DB_URL)
         self.db = self.mongo_client[settings.MONGO_DB_NAME]
