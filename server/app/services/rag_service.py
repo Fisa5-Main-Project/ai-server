@@ -1,6 +1,3 @@
-"""
-개선된 RAG 서비스 - 사용자 임베딩 기반 추천
-"""
 import asyncio
 from typing import TypedDict, Annotated, Sequence
 import operator
@@ -17,7 +14,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
 
 # --- LLM, DB, Models ---
-from langchain_google_genai import ChatGoogleGenerativeAI
+from app.core.llm_factory import get_llm
 from app.core.config import settings
 from app.db.vector_store import (
     deposit_vector_store, saving_vector_store, 
@@ -26,12 +23,8 @@ from app.db.vector_store import (
 from app.services.user_vectorization_service import user_vectorization_service
 from app.models.recommendation import RecommendationResponse, RecommendedProduct
 
-# 1. Gemini LLM 모델 초기화
-llm = ChatGoogleGenerativeAI(
-    model="gemini-2.5-flash",
-    google_api_key=settings.GEMINI_API_KEY,
-    temperature=0.1
-)
+# 1. LLM 모델 초기화 (Factory 사용)
+llm = get_llm(temperature=0.1)
 
 # 2. Vector Search Tools 정의 (product_id 포함)
 @tool
