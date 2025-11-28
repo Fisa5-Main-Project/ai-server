@@ -3,7 +3,7 @@
 """
 from fastapi import APIRouter, HTTPException
 from app.models.recommendation import RecommendationResponse
-from app.services.rag_service import rag_service
+from app.services.products_service import products_service
 
 router = APIRouter(tags=["Recommendations"])
 
@@ -34,7 +34,7 @@ async def get_recommendations(user_id: int):
     - reason: AI 생성 추천 이유
     """
     try:
-        recommendations = await rag_service.get_recommendations(user_id)
+        recommendations = await products_service.get_recommendations(user_id)
         return recommendations
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"추천 실패: {str(e)}")
