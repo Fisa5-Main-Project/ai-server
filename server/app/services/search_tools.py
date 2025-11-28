@@ -1,5 +1,5 @@
 """
-Shared Vector Search Tools
+Vector Search 공통 모듈
 """
 from langchain_core.tools import tool
 from app.db.vector_store import (

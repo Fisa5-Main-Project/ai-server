@@ -1,3 +1,6 @@
+"""
+상품 추천 서비스 로직
+"""
 import asyncio
 from typing import TypedDict, Annotated, Sequence, List, Optional
 import operator

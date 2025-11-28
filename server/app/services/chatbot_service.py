@@ -1,5 +1,5 @@
 """
-스트리밍 챗봇 서비스
+스트리밍 챗봇 서비스 로직
 LangGraph 기반 대화형 금융상품 추천 챗봇
 """
 from typing import List, Dict, Optional
