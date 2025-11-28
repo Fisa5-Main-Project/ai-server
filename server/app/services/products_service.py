@@ -132,7 +132,7 @@ workflow.add_edge("tools", "agent")
 agent_graph = workflow.compile()
 
 # 7. RAG 서비스 클래스
-class RAGService:
+class ProductsService:
     async def get_recommendations(self, user_id: int) -> RecommendationResponse:
         """사용자 임베딩 기반 금융상품 추천"""
         
@@ -236,4 +236,4 @@ class RAGService:
             
         return products
 
-rag_service = RAGService()
+products_service = ProductsService()

@@ -19,7 +19,7 @@ from app.db.vector_store import (
     annuity_vector_store, fund_vector_store
 )
 from app.services.user_vectorization_service import user_vectorization_service
-from app.services.rag_service import rag_service
+from app.services.products_service import products_service
 from app.services.search_tools import SEARCH_TOOLS
 from app.models.chatbot_models import ChatStreamChunk, ChatProduct
 
@@ -187,7 +187,7 @@ class ChatbotService:
         if is_recommendation:
             try:
                 # RAG 서비스를 통해 추천 상품 가져오기
-                products = await rag_service.get_chat_products(user_id)
+                products = await products_service.get_chat_products(user_id)
             except Exception as e:
                 print(f"RAG 추천 실패: {e}")
                 # 실패해도 대화는 계속 진행
