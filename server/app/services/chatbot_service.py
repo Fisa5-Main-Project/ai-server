@@ -1,5 +1,5 @@
 """
-스트리밍 챗봇 서비스
+스트리밍 챗봇 서비스 로직
 LangGraph 기반 대화형 금융상품 추천 챗봇
 """
 from typing import List, Dict, Optional
@@ -19,6 +19,9 @@ from app.db.vector_store import (
     annuity_vector_store, fund_vector_store
 )
 from app.services.user_vectorization_service import user_vectorization_service
+from app.services.rag_service import rag_service
+from app.services.search_tools import SEARCH_TOOLS
+from app.models.chatbot_models import ChatStreamChunk, ChatProduct
 
 
 from app.core.llm_factory import get_llm
@@ -32,66 +35,14 @@ class ChatbotService:
         self.chat_logs_collection = self.db["chat_logs"]
         self.chat_history_collection = self.db["chat_history"]
         
-        # Vector Search Tools
-        self.tools = self._create_tools()
+        # Vector Search Tools (Shared)
+        self.tools = SEARCH_TOOLS
         self.llm_with_tools = self.llm.bind_tools(self.tools)
         
         # LangGraph Agent
         self.agent_graph = self._create_agent_graph()
     
-    def _create_tools(self):
-        """Vector Search 도구 생성"""
-        from langchain_core.tools import tool
-        
-        @tool
-        def search_deposits(query: str) -> str:
-            """정기예금 상품을 검색합니다."""
-            retriever = deposit_vector_store.as_retriever(
-                search_kwargs={'k': 2, 'pre_filter': {'product_type': 'deposit'}}
-            )
-            docs = retriever.get_relevant_documents(query)
-            results = []
-            for doc in docs:
-                doc_id = doc.metadata.get('_id', 'unknown')
-                results.append(f"[ID:{doc_id}] {doc.page_content}")
-            return "\n\n".join(results)
-        
-        @tool
-        def search_savings(query: str) -> str:
-            """적금 상품을 검색합니다."""
-            retriever = saving_vector_store.as_retriever(
-                search_kwargs={'k': 2, 'pre_filter': {'product_type': 'saving'}}
-            )
-            docs = retriever.get_relevant_documents(query)
-            results = []
-            for doc in docs:
-                doc_id = doc.metadata.get('_id', 'unknown')
-                results.append(f"[ID:{doc_id}] {doc.page_content}")
-            return "\n\n".join(results)
-        
-        @tool
-        def search_annuities(query: str) -> str:
-            """연금저축 상품을 검색합니다."""
-            retriever = annuity_vector_store.as_retriever(search_kwargs={'k': 2})
-            docs = retriever.get_relevant_documents(query)
-            results = []
-            for doc in docs:
-                doc_id = doc.metadata.get('_id', 'unknown')
-                results.append(f"[ID:{doc_id}] {doc.page_content}")
-            return "\n\n".join(results)
-        
-        @tool
-        def search_funds(query: str) -> str:
-            """펀드 상품을 검색합니다."""
-            retriever = fund_vector_store.as_retriever(search_kwargs={'k': 2})
-            docs = retriever.get_relevant_documents(query)
-            results = []
-            for doc in docs:
-                doc_id = doc.metadata.get('_id', 'unknown')
-                results.append(f"[ID:{doc_id}] {doc.page_content}")
-            return "\n\n".join(results)
-        
-        return [search_deposits, search_savings, search_annuities, search_funds]
+    # _create_tools removed (using shared SEARCH_TOOLS)
     
     def _create_agent_graph(self):
         """LangGraph Agent 생성"""
@@ -211,7 +162,7 @@ class ChatbotService:
         message: str,
         keywords: Optional[List[int]] = None
     ):
-        """스트리밍 챗봇 응답 (실제 LLM 스트리밍)"""
+        """스트리밍 챗봇 응답 (실제 LLM 스트리밍 + RAG 추천)"""
         
         # 1. 금융상품 질문 검증
         if not self.is_financial_question(message):
@@ -227,31 +178,48 @@ class ChatbotService:
         # 3. 대화 히스토리 가져오기
         history = self.get_chat_history(user_id, session_id)
         
-        # 4. 시스템 프롬프트 (사용자 컨텍스트 포함)
+        # 4. 추천 요청 감지 (단순 키워드 기반)
+        is_recommendation = "추천" in message or "상품" in message
+        
+        products: List[ChatProduct] = []
+        
+        # 5. 추천 요청인 경우 RAG 서비스 호출
+        if is_recommendation:
+            try:
+                # RAG 서비스를 통해 추천 상품 가져오기
+                products = await rag_service.get_chat_products(user_id)
+            except Exception as e:
+                print(f"RAG 추천 실패: {e}")
+                # 실패해도 대화는 계속 진행
+        
+        # 6. 시스템 프롬프트 구성
         system_prompt = f"""
 당신은 금융상품 추천 전문가 '노후하우'입니다.
 
 [사용자 프로필]
 {user_context}
 
-위 사용자 프로필을 참고하여, 사용자의 질문에 대해 적절한 금융상품(예금, 적금, 연금, 펀드)을 추천하고 설명해주세요.
-상품 추천 시 [ID:xxx] 형태로 제공된 product_id를 포함해주세요.
+[추천된 상품 정보]
+{json.dumps([p.dict() for p in products], ensure_ascii=False) if products else "없음"}
+
+위 사용자 프로필과 추천된 상품 정보를 참고하여, 사용자의 질문에 대해 친절하게 답변해주세요.
+추천된 상품이 있다면 그 상품들의 특징을 자연스럽게 언급하며 추천 이유를 설명해주세요.
 금융상품과 관련 없는 질문에는 답변하지 마세요.
 """
         
-        # 5. 메시지 구성
+        # 7. 메시지 구성
         messages = [
             SystemMessage(content=system_prompt)
         ] + history + [HumanMessage(content=message)]
         
-        # 6. 사용자 메시지 저장
+        # 8. 사용자 메시지 저장
         self.save_message(user_id, session_id, "user", message)
         
-        # 7. LLM 스트리밍
+        # 9. LLM 스트리밍 및 응답 생성
         full_response = ""
         
         try:
-            # 실제 LLM 스트리밍 사용
+            # 9-1. 텍스트 스트리밍
             async for chunk in self.llm.astream(messages):
                 if hasattr(chunk, 'content') and chunk.content:
                     token = chunk.content
@@ -261,10 +229,24 @@ class ChatbotService:
                         "content": token
                     }
             
-            # 8. AI 응답 저장
+            # 9-2. 상품 정보 전송 (있는 경우)
+            if products:
+                yield {
+                    "type": "products",
+                    "products": [p.dict() for p in products]
+                }
+            
+            # 9-3. 추천 키워드 전송 (고정 또는 동적 생성 가능)
+            suggested_keywords = ["다른 상품 추천", "상담 종료"]
+            yield {
+                "type": "keywords",
+                "keywords": suggested_keywords
+            }
+            
+            # 10. AI 응답 저장
             self.save_message(user_id, session_id, "assistant", full_response)
             
-            # 9. 완료 신호
+            # 11. 완료 신호
             yield {
                 "type": "done",
                 "content": full_response

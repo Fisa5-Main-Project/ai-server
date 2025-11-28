@@ -13,11 +13,24 @@ class ChatRequest(BaseModel):
     keywords: Optional[List[int]] = None  # 추가 키워드 ID 리스트 (선택)
 
 
+class ChatProduct(BaseModel):
+    """클라이언트 ChatProduct 인터페이스와 일치하는 모델"""
+    id: str
+    icon: str
+    type: str
+    name: str
+    bank: str
+    features: List[str]
+    stat: str
+
+
 class ChatStreamChunk(BaseModel):
     """SSE 스트리밍 청크"""
-    type: str  # "token", "done", "error", "product"
-    content: str
-    metadata: Optional[dict] = None  # 상품 정보 등 추가 메타데이터
+    type: str  # "token", "products", "keywords", "done", "error"
+    content: Optional[str] = None
+    products: Optional[List[ChatProduct]] = None
+    keywords: Optional[List[str]] = None
+    metadata: Optional[dict] = None
 
 
 class FeedbackRequest(BaseModel):
