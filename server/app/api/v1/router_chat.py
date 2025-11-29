@@ -90,3 +90,31 @@ async def save_feedback(request: FeedbackRequest):
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"피드백 저장 실패: {str(e)}")
+
+@router.get("/chat/history")
+async def get_chat_history(user_id: int, session_id: str, limit: int = 5, skip: int = 0):
+    """
+    대화 히스토리 조회 API (페이지네이션 지원)
+    
+    - limit: 가져올 메시지 수 (기본 5)
+    - skip: 건너뛸 메시지 수 (기본 0)
+    """
+    try:
+        # 최신 메시지부터 가져오기 위해 내림차순 정렬 후 skip/limit 적용
+        history_docs = chatbot_service.chat_history_collection.find(
+            {"user_id": user_id, "session_id": session_id}
+        ).sort("timestamp", -1).skip(skip).limit(limit)
+        
+        history = []
+        for doc in history_docs:
+            history.append({
+                "role": doc["role"],
+                "content": doc["content"],
+                "timestamp": doc["timestamp"].isoformat()
+            })
+            
+        # 클라이언트에는 시간순(과거->최신)으로 반환해야 하므로 다시 뒤집음
+        return {"history": history[::-1]}
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"히스토리 조회 실패: {str(e)}")

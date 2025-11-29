@@ -22,6 +22,7 @@ class ChatProduct(BaseModel):
     bank: str
     features: List[str]
     stat: str
+    link: Optional[str] = None  # 상품 상세/검색 링크
 
 
 class ChatStreamChunk(BaseModel):
