@@ -28,7 +28,7 @@ def get_llm(temperature: float = 0.3, streaming: bool = False):
         
     elif provider == "gemini":
         return ChatGoogleGenerativeAI(
-            model="gemini-2.5-flash",
+            model="gemini-2.5-flash-lite",
             google_api_key=settings.GEMINI_API_KEY,
             temperature=temperature,
             streaming=streaming

@@ -2,7 +2,7 @@
 금융상품 추천 API 엔드포인트
 """
 from fastapi import APIRouter, HTTPException
-from app.models.recommendation import RecommendationResponse
+from app.schemas.recommendation import RecommendationResponse
 from app.services.products_service import products_service
 
 router = APIRouter(tags=["Recommendations"])
@@ -35,6 +35,7 @@ async def get_recommendations(user_id: int):
     """
     try:
         recommendations = await products_service.get_recommendations(user_id)
+        print("recommendations", recommendations)
         return recommendations
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"추천 실패: {str(e)}")

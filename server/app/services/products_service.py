@@ -1,139 +1,63 @@
 """
-상품 추천 서비스 로직
+상품 추천 서비스 로직 (Refactored)
 """
-import asyncio
-from typing import TypedDict, Annotated, Sequence, List, Optional
-import operator
 import json
 import re
+from typing import List
 
-# --- LangGraph & Agent 관련 임포트 ---
-from langgraph.graph import StateGraph, END
-from langgraph.prebuilt import ToolNode
+from langchain_core.messages import HumanMessage
 
-# --- LangChain Tools & Retrievers ---
-from langchain_core.tools import tool
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
-
-# --- LLM, DB, Models ---
-from app.core.llm_factory import get_llm
-from app.core.config import settings
-from app.services.search_tools import SEARCH_TOOLS
+from app.rag.graphs.product_graph import build_product_graph
 from app.services.user_vectorization_service import user_vectorization_service
-from app.models.recommendation import RecommendationResponse, RecommendedProduct
-from app.models.chatbot_models import ChatProduct
+from app.schemas.recommendation import RecommendationResponse, RecommendedProduct
+from app.schemas.chat import ChatProduct
 
-# 1. LLM 모델 초기화 (Factory 사용)
-llm = get_llm(temperature=0.1)
+# 그래프는 싱글톤으로 생성
+product_graph = build_product_graph()
 
-# 2. Vector Search Tools 정의 (Shared Tools 사용)
-tools = SEARCH_TOOLS
+COMPANY_URLS = {
+    "국민": "https://www.kbstar.com/",
+    "KB": "https://www.kbstar.com/",
+    "신한": "https://www.shinhan.com/",
+    "하나": "https://www.kebhana.com/",
+    "우리": "https://www.wooribank.com/",
+    "농협": "https://banking.nonghyup.com/",
+    "NH": "https://banking.nonghyup.com/",
+    "엔에이치": "https://banking.nonghyup.com/",
+    "기업": "https://www.ibk.co.kr/",
+    "IBK": "https://www.ibk.co.kr/",
+    "카카오": "https://www.kakaobank.com/",
+    "토스": "https://www.tossbank.com/",
+    "케이": "https://www.kbanknow.com/",
+    "삼성": "https://www.samsungpop.com/",
+    "미래": "https://securities.miraeasset.com/",
+    "한국투자": "https://securities.koreainvestment.com/",
+    "키움": "https://www.kiwoom.com/",
+    "대신": "https://www.daishin.com/",
+    "메리츠": "https://home.meritz.co.kr/",
+    "부산": "https://www.busanbank.co.kr/",
+    "광주": "https://www.kjbank.com/",
+    "전북": "https://www.jbbank.co.kr/",
+    "SC": "https://www.standardchartered.co.kr/",
+    "대구": "https://www.dgb.co.kr/",
+    "경남": "https://www.knbank.co.kr/",
+    "수협": "https://suhyup-bank.com/",
+    "신협": "https://www.cu.co.kr/",
+    "우체국": "https://www.epostbank.go.kr/",
+    "새마을": "https://www.kfcc.co.kr/",
+    "한화": "https://www.hanwhawm.com/",
+    "유안타": "https://www.myasset.com/",
+    "유진": "https://www.eugenefn.com/",
+    "교보": "https://www.iprovest.com/",
+    "하이": "https://www.hi-ib.com/",
+    "현대": "https://www.hmsec.com/",
+    "DB": "https://www.db-fi.com/",
+    "SK": "https://www.sks.co.kr/",
+    "LS": "https://www.ls-sec.co.kr/",
+}
 
-# LLM에 tool 바인딩
-llm_with_tools = llm.bind_tools(tools)
-
-# 3. Agent State 정의
-class AgentState(TypedDict):
-    messages: Annotated[Sequence[BaseMessage], operator.add]
-    persona: str
-
-# 4. Agent 프롬프트 (product_id 포함하도록 개선)
-SYSTEM_PROMPT = """
-당신은 사용자의 페르소나에 맞춰 금융 상품을 추천하는 전문 AI 어드바이저 '노후하우'입니다.
-
-당신의 임무는 3가지입니다:
-1. [사용자 페르소나]를 분석합니다.
-2. 페르소나에 가장 적합한 **예금 또는 적금 1개**, **연금 1개**, **펀드 1개**를 추천하기 위해, 당신에게 제공된 [도구(Tools)]를 사용해야 합니다.
-3. 검색된 상품 정보(Tool observation)를 바탕으로, 각 상품을 추천하는 구체적인 이유를 요약합니다.
-
-[중요 규칙]
-- 반드시 3가지 카테고리(예/적금, 연금, 펀드) 각각에 대해 도구를 검색하고 추천해야 합니다.
-- 사용자가 '안정추구형'이면 'search_deposits'나 'search_savings'를, '공격투자형'이면 'search_funds'를 우선적으로 고려하세요.
-- 페르소나에 적합한 상품을 찾지 못하면, 해당 필드는 null로 비워두고 이유는 "추천할 상품을 찾지 못했습니다."라고 명시하세요.
-- Tool 결과에서 [ID:xxx] 형태로 제공된 product_id를 반드시 JSON 응답에 포함하세요.
-
-최종 응답은 다음 JSON 형식으로만 답변하세요:
-{{
-  "deposit_or_saving": {{
-    "product_id": "...",
-    "product_type": "예금" or "적금",
-    "product_name": "...",
-    "company_name": "...",
-    "benefit": "최고 연 X.X%",
-    "reason": "..."
-  }},
-  "annuity": {{
-    "product_id": "...",
-    "product_type": "연금저축",
-    "product_name": "...",
-    "company_name": "...",
-    "benefit": "세액공제 16.5%",
-    "reason": "..."
-  }},
-  "fund": {{
-    "product_id": "...",
-    "product_type": "펀드",
-    "product_name": "...",
-    "company_name": "...",
-    "benefit": "수익률 12.3%",
-    "reason": "..."
-  }}
-}}
-"""
-
-# 5. Agent 노드 함수들
-def agent_node(state: AgentState):
-    """Agent가 다음 액션을 결정하는 노드"""
-    messages = state["messages"]
-    
-    # 시스템 프롬프트 + 이전 대화 메시지
-    full_messages = [
-        {"role": "system", "content": SYSTEM_PROMPT}
-    ] + messages
-    
-    response = llm_with_tools.invoke(full_messages)
-    return {"messages": [response]}
-
-def should_continue(state: AgentState):
-    """Tool 호출이 필요한지 판단"""
-    messages = state["messages"]
-    last_message = messages[-1]
-    
-    # Tool 호출이 있으면 "continue", 없으면 "end"
-    if hasattr(last_message, "tool_calls") and last_message.tool_calls:
-        return "continue"
-    return "end"
-
-# 6. LangGraph 구성
-workflow = StateGraph(AgentState)
-
-# 노드 추가
-workflow.add_node("agent", agent_node)
-workflow.add_node("tools", ToolNode(tools))
-
-# 시작점 설정
-workflow.set_entry_point("agent")
-
-# 조건부 엣지 추가
-workflow.add_conditional_edges(
-    "agent",
-    should_continue,
-    {
-        "continue": "tools",
-        "end": END
-    }
-)
-
-# Tool 실행 후 다시 agent로
-workflow.add_edge("tools", "agent")
-
-# Graph 컴파일
-agent_graph = workflow.compile()
-
-# 7. RAG 서비스 클래스
 class ProductsService:
-    async def get_recommendations(self, user_id: int) -> RecommendationResponse:
+    async def get_recommendations(self, user_id: int, user_message: str = "") -> RecommendationResponse:
         """사용자 임베딩 기반 금융상품 추천"""
         
         # 1. 사용자 페르소나 가져오기
@@ -142,7 +66,6 @@ class ProductsService:
         )
         
         if not user_vector:
-            # 사용자 벡터가 없으면 먼저 벡터화 실행
             await user_vectorization_service.vectorize_user(user_id)
             user_vector = user_vectorization_service.user_vectors_collection.find_one(
                 {"_id": f"user_{user_id}"}
@@ -152,88 +75,84 @@ class ProductsService:
         
         try:
             # 2. Agent Graph 실행
-            result = await agent_graph.ainvoke({
-                "messages": [HumanMessage(content=persona)],
+            content = f"{persona}\n\n사용자 요청: {user_message}" if user_message else persona
+            
+            result = await product_graph.ainvoke({
+                "messages": [HumanMessage(content=content)],
                 "persona": persona
             })
-            
             
             # 3. 마지막 메시지에서 JSON 추출
             last_message = result["messages"][-1]
             response_text = last_message.content
             
-            
             # 4. JSON 파싱
-            # JSON 부분만 추출
             json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
             if json_match:
                 json_str = json_match.group()
                 data = json.loads(json_str)
                 
+                products = []
+                if data.get("products"):
+                    for p in data["products"]:
+                        products.append(RecommendedProduct(**p))
                 
-                # RecommendedProduct 객체로 변환
-                deposit_or_saving = None
-                if data.get("deposit_or_saving"):
-                    deposit_or_saving = RecommendedProduct(**data["deposit_or_saving"])
-                
-                annuity = None
-                if data.get("annuity"):
-                    annuity = RecommendedProduct(**data["annuity"])
-                
-                fund = None
-                if data.get("fund"):
-                    fund = RecommendedProduct(**data["fund"])
-                
-                return RecommendationResponse(
-                    deposit_or_saving=deposit_or_saving,
-                    annuity=annuity,
-                    fund=fund
-                )
+                # Legacy format fallback
+                if not products:
+                    if data.get("deposit_or_saving"):
+                        products.append(RecommendedProduct(**data["deposit_or_saving"]))
+                    if data.get("annuity"):
+                        products.append(RecommendedProduct(**data["annuity"]))
+                    if data.get("fund"):
+                        products.append(RecommendedProduct(**data["fund"]))
+
+                return RecommendationResponse(products=products)
             else:
                 print(f"JSON 형식을 찾을 수 없습니다: {response_text}")
-                return RecommendationResponse(
-                    deposit_or_saving=None,
-                    annuity=None,
-                    fund=None
-                )
+                return RecommendationResponse(products=[])
         
         except Exception as e:
             print(f"Agent 실행 실패: {e}")
             import traceback
             traceback.print_exc()
-            
-            return RecommendationResponse(
-                deposit_or_saving=None,
-                annuity=None,
-                fund=None
-            )
+            return RecommendationResponse(products=[])
 
     def _convert_to_chat_product(self, product: RecommendedProduct, icon: str) -> ChatProduct:
         """RecommendedProduct를 ChatProduct로 변환"""
+        
+        link = f"https://search.naver.com/search.naver?query={product.company_name} {product.product_name}"
+        
+        for key, url in COMPANY_URLS.items():
+            if key in product.company_name:
+                link = url
+                break
+
         return ChatProduct(
             id=product.product_id,
             icon=icon,
             type=product.product_type,
             name=product.product_name,
             bank=product.company_name,
-            features=[product.reason], # 이유를 특징으로 사용하거나 별도 필드 필요
-            stat=product.benefit
+            features=[product.reason],
+            stat=product.benefit,
+            link=link
         )
 
-    async def get_chat_products(self, user_id: int) -> List[ChatProduct]:
+    async def get_chat_products(self, user_id: int, user_message: str = "") -> List[ChatProduct]:
         """챗봇용 상품 추천 목록 반환"""
-        rec_response = await self.get_recommendations(user_id)
+        rec_response = await self.get_recommendations(user_id, user_message)
         products = []
         
-        if rec_response.deposit_or_saving:
-            products.append(self._convert_to_chat_product(rec_response.deposit_or_saving, "💰"))
-            
-        if rec_response.annuity:
-            products.append(self._convert_to_chat_product(rec_response.annuity, "🎯"))
-            
-        if rec_response.fund:
-            products.append(self._convert_to_chat_product(rec_response.fund, "📈"))
-            
+        if rec_response.products:
+            for p in rec_response.products:
+                icon = "💰"
+                if "연금" in (p.product_type or ""):
+                    icon = "🎯"
+                elif "펀드" in (p.product_type or ""):
+                    icon = "📈"
+                
+                products.append(self._convert_to_chat_product(p, icon))
+        
         return products
 
 products_service = ProductsService()

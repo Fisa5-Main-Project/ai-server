@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api.v1 import router_recommend, router_chat, router_vectorize
+from app.api.v1.api import api_router
 
 app = FastAPI(
     title="노후하우 AI 추천 서버",
@@ -29,9 +29,7 @@ app.add_middleware(
 )
 
 # API v1 라우터 포함
-app.include_router(router_recommend.router, prefix="/api/v1")
-app.include_router(router_chat.router, prefix="/api/v1")
-app.include_router(router_vectorize.router, prefix="/api/v1")
+app.include_router(api_router, prefix="/api")
 
 
 @app.get("/")

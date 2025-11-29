@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     # 1. Gemini LLM 설정
     GEMINI_API_KEY: str
     GROQ_API_KEY: str | None = None
-    LLM_PROVIDER: str = "groq"  # "gemini"나 "groq"으로 바꾸면 LLM모델을 변경할 수 있습니다.
+    LLM_PROVIDER: str = "gemini"  # "gemini"나 "groq"으로 바꾸면 LLM모델을 변경할 수 있습니다.
 
     # 2. MongoDB (VectorDB) 설정
     MONGO_DB_NAME: str

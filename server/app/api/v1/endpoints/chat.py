@@ -3,8 +3,8 @@
 """
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
-from app.models.chatbot_models import ChatRequest, FeedbackRequest, FeedbackResponse
-from app.services.chatbot_service import chatbot_service
+from app.schemas.chat import ChatRequest, FeedbackRequest, FeedbackResponse
+from app.services.chat_service import chat_service
 import json
 
 router = APIRouter(tags=["Chatbot"])
@@ -33,7 +33,7 @@ async def chat_stream(request: ChatRequest):
     """
     async def event_generator():
         try:
-            async for chunk in chatbot_service.stream_chat(
+            async for chunk in chat_service.stream_chat(
                 user_id=request.user_id,
                 session_id=request.session_id,
                 message=request.message,
@@ -76,7 +76,7 @@ async def save_feedback(request: FeedbackRequest):
     - product_id: (Optional) 추천된 상품 ID
     """
     try:
-        chatbot_service.save_feedback(
+        chat_service.save_feedback(
             user_id=request.user_id,
             session_id=request.session_id,
             message_id=request.message_id,
@@ -90,3 +90,26 @@ async def save_feedback(request: FeedbackRequest):
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"피드백 저장 실패: {str(e)}")
+
+@router.get("/chat/history")
+async def get_chat_history(user_id: int, session_id: str, limit: int = 5, skip: int = 0):
+    """
+    대화 히스토리 조회 API (페이지네이션 지원)
+    
+    - limit: 가져올 메시지 수 (기본 5)
+    - skip: 건너뛸 메시지 수 (기본 0)
+    """
+    try:
+        # 최신 메시지부터 가져오기 위해 내림차순 정렬 후 skip/limit 적용
+        # 최신 메시지부터 가져오기 위해 내림차순 정렬 후 skip/limit 적용
+        history = chat_service.get_paginated_chat_history(
+            user_id=user_id,
+            session_id=session_id,
+            limit=limit,
+            skip=skip
+        )
+            
+        return {"history": history}
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"히스토리 조회 실패: {str(e)}")

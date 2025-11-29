@@ -2,16 +2,10 @@
 사용자 벡터화 API 엔드포인트
 """
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
 from app.services.user_vectorization_service import user_vectorization_service
+from app.schemas.vectorize import VectorizationResponse
 
 router = APIRouter(tags=["User Vectorization"])
-
-
-class VectorizationResponse(BaseModel):
-    user_id: int
-    persona_text: str
-    status: str
 
 
 @router.post("/users/{user_id}/vectorize", response_model=VectorizationResponse)
