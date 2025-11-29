@@ -35,6 +35,7 @@ async def get_recommendations(user_id: int):
     """
     try:
         recommendations = await products_service.get_recommendations(user_id)
+        print("recommendations", recommendations)
         return recommendations
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"추천 실패: {str(e)}")

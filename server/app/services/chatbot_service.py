@@ -158,6 +158,45 @@ class ChatbotService:
         
         return has_financial_keyword and not has_non_financial
     
+    def check_feature_navigation(self, message: str) -> Optional[Dict]:
+        """특정 키워드에 따른 기능 이동 가이드 확인"""
+        message = message.lower()
+        
+        # 1. 퇴직연금 (Pension)
+        if any(k in message for k in ["퇴직연금", "연금저축", "연금 추천", "pension", "연금 저축", "퇴직", "연금",]):
+            return {
+                "type": "feature_guide",
+                "title": "퇴직연금 맞춤 관리",
+                "description": "세액공제 혜택과 노후 준비를 동시에! 나에게 딱 맞는 퇴직연금 포트폴리오를 확인해보세요.",
+                "benefit": "세액공제 혜택",
+                "link": "/pension",
+                "button_text": "은퇴 후 자금 진단하기"
+            }
+            
+        # 2. 상속/증여/신탁 (Inheritance)
+        if any(k in message for k in ["신탁", "irp", "db", "dc", "isa", "상속", "증여"]):
+            return {
+                "type": "feature_guide",
+                "title": "스마트한 유산 관리 & 상속",
+                "description": "ISA, IRP부터 상속/증여 시뮬레이션까지. 나에게 딱 맞는 유산 관리 플랜을 확인해보세요.",
+                "benefit": "절세 효과 및 체계적인 자산 승계 플랜",
+                "link": "/inheritance",
+                "button_text": "안전한 상속 관리하기"
+            }
+            
+        # 3. 일자리/위치 (Job/Location)
+        if any(k in message for k in ["일자리", "취업", "알바", "근처", "위치"]):
+            return {
+                "type": "feature_guide",
+                "title": "내 주변 일자리 찾기",
+                "description": "시니어/중장년을 위한 주변의 맞춤형 일자리 정보를 쉽고 빠르게 찾아보세요.",
+                "benefit": "위치 기반 실시간 채용 정보 제공",
+                "link": "/job/location",
+                "button_text": "인생 일자리 찾으러 가기"
+            }
+            
+        return None
+
     async def stream_chat(
         self,
         user_id: int,
@@ -234,6 +273,9 @@ class ChatbotService:
                 print(f"RAG 추천 실패: {e}")
                 # 실패해도 대화는 계속 진행
         
+        # 6. 기능 이동 가이드 확인 (Feature Navigation)
+        feature_guide = self.check_feature_navigation(message)
+
         # 상품 정보 간소화 (토큰 절약)
         simple_products = []
         if products:
@@ -246,7 +288,7 @@ class ChatbotService:
                     "reason": p.features[0] if p.features else ""
                 })
 
-        # 6. 시스템 프롬프트 구성
+        # 7. 시스템 프롬프트 구성
         system_prompt = f"""
 당신은 금융상품 추천 전문가 '노후하우'입니다.
 
@@ -260,10 +302,10 @@ class ChatbotService:
 추천된 상품이 있다면 그 상품들의 특징을 자연스럽게 언급하며 추천 이유를 설명해주세요.
 금융상품과 관련 없는 질문에는 답변하지 마세요.
 
-[중요: 상품 정보 기반 답변 원칙]
+[중요: 상품 정보 기반 답변 원칙 - 할루시네이션 방지]
 1. **반드시 [추천된 상품 정보]에 있는 상품만 언급하세요.**
-2. **절대로 [추천된 상품 정보]에 없는 상품을 지어내거나 언급하지 마세요.**
-3. 만약 사용자가 특정 금융사(예: 우리은행)를 요청했으나 [추천된 상품 정보]에 해당 금융사 상품이 없다면, "죄송합니다. 요청하신 금융사의 상품은 찾지 못했지만, 대신 고객님께 적합한 다른 상품들을 추천해 드립니다."라고 솔직하게 말하고, **실제로 [추천된 상품 정보]에 있는 상품(예: 경남은행, 부산은행 등)을 소개하세요.**
+2. **절대로 [추천된 상품 정보]에 없는 상품을 지어내거나, 존재하지 않는 상품을 추천하지 마세요.** (매우 중요)
+3. 만약 사용자가 특정 금융사(예: 우리은행)를 요청했으나 [추천된 상품 정보]에 해당 금융사 상품이 없다면, "죄송합니다. 요청하신 금융사의 상품은 찾지 못했지만, 대신 고객님께 적합한 다른 상품들을 추천해 드립니다."라고 솔직하게 말하고, **실제로 [추천된 상품 정보]에 있는 상품을 소개하세요.**
 4. **텍스트 답변에 언급하는 상품명은 반드시 [추천된 상품 정보]의 'name' 필드와 정확히 일치해야 합니다.**
 5. 답변에서 "우리은행 상품을 추천합니다"라고 말해놓고 실제로는 다른 은행 상품을 설명하면 안 됩니다. 솔직하게 "다른 은행 상품"이라고 말하세요.
 6. **텍스트 답변에 언급하는 금융사명은 반드시 [추천된 상품 정보]의 'company' 필드와 정확히 일치해야 합니다.**
@@ -362,7 +404,11 @@ class ChatbotService:
                     "products": [p.dict() for p in products]
                 }
             
-            # 9-3. 추천 키워드 전송
+            # 9-3. 기능 이동 가이드 전송 (있는 경우)
+            if feature_guide:
+                yield feature_guide
+            
+            # 9-4. 추천 키워드 전송
             yield {
                 "type": "keywords",
                 "keywords": suggested_keywords
@@ -370,6 +416,10 @@ class ChatbotService:
             
             # 10. AI 응답 저장
             self.save_message(user_id, session_id, "assistant", full_response)
+            
+            print(f"DEBUG: Full Chat Response: {full_response}")
+            if feature_guide:
+                print(f"DEBUG: Feature Guide: {feature_guide}")
             
             # 11. 완료 신호
             yield {
