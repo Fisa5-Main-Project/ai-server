@@ -101,20 +101,15 @@ async def get_chat_history(user_id: int, session_id: str, limit: int = 5, skip: 
     """
     try:
         # 최신 메시지부터 가져오기 위해 내림차순 정렬 후 skip/limit 적용
-        history_docs = chat_service.chat_history_collection.find(
-            {"user_id": user_id, "session_id": session_id}
-        ).sort("timestamp", -1).skip(skip).limit(limit)
-        
-        history = []
-        for doc in history_docs:
-            history.append({
-                "role": doc["role"],
-                "content": doc["content"],
-                "timestamp": doc["timestamp"].isoformat()
-            })
+        # 최신 메시지부터 가져오기 위해 내림차순 정렬 후 skip/limit 적용
+        history = chat_service.get_paginated_chat_history(
+            user_id=user_id,
+            session_id=session_id,
+            limit=limit,
+            skip=skip
+        )
             
-        # 클라이언트에는 시간순(과거->최신)으로 반환해야 하므로 다시 뒤집음
-        return {"history": history[::-1]}
+        return {"history": history}
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"히스토리 조회 실패: {str(e)}")

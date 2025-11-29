@@ -15,6 +15,47 @@ from app.schemas.chat import ChatProduct
 # 그래프는 싱글톤으로 생성
 product_graph = build_product_graph()
 
+COMPANY_URLS = {
+    "국민": "https://www.kbstar.com/",
+    "KB": "https://www.kbstar.com/",
+    "신한": "https://www.shinhan.com/",
+    "하나": "https://www.kebhana.com/",
+    "우리": "https://www.wooribank.com/",
+    "농협": "https://banking.nonghyup.com/",
+    "NH": "https://banking.nonghyup.com/",
+    "엔에이치": "https://banking.nonghyup.com/",
+    "기업": "https://www.ibk.co.kr/",
+    "IBK": "https://www.ibk.co.kr/",
+    "카카오": "https://www.kakaobank.com/",
+    "토스": "https://www.tossbank.com/",
+    "케이": "https://www.kbanknow.com/",
+    "삼성": "https://www.samsungpop.com/",
+    "미래": "https://securities.miraeasset.com/",
+    "한국투자": "https://securities.koreainvestment.com/",
+    "키움": "https://www.kiwoom.com/",
+    "대신": "https://www.daishin.com/",
+    "메리츠": "https://home.meritz.co.kr/",
+    "부산": "https://www.busanbank.co.kr/",
+    "광주": "https://www.kjbank.com/",
+    "전북": "https://www.jbbank.co.kr/",
+    "SC": "https://www.standardchartered.co.kr/",
+    "대구": "https://www.dgb.co.kr/",
+    "경남": "https://www.knbank.co.kr/",
+    "수협": "https://suhyup-bank.com/",
+    "신협": "https://www.cu.co.kr/",
+    "우체국": "https://www.epostbank.go.kr/",
+    "새마을": "https://www.kfcc.co.kr/",
+    "한화": "https://www.hanwhawm.com/",
+    "유안타": "https://www.myasset.com/",
+    "유진": "https://www.eugenefn.com/",
+    "교보": "https://www.iprovest.com/",
+    "하이": "https://www.hi-ib.com/",
+    "현대": "https://www.hmsec.com/",
+    "DB": "https://www.db-fi.com/",
+    "SK": "https://www.sks.co.kr/",
+    "LS": "https://www.ls-sec.co.kr/",
+}
+
 class ProductsService:
     async def get_recommendations(self, user_id: int, user_message: str = "") -> RecommendationResponse:
         """사용자 임베딩 기반 금융상품 추천"""
@@ -79,50 +120,9 @@ class ProductsService:
     def _convert_to_chat_product(self, product: RecommendedProduct, icon: str) -> ChatProduct:
         """RecommendedProduct를 ChatProduct로 변환"""
         
-        company_urls = {
-            "국민": "https://www.kbstar.com/",
-            "KB": "https://www.kbstar.com/",
-            "신한": "https://www.shinhan.com/",
-            "하나": "https://www.kebhana.com/",
-            "우리": "https://www.wooribank.com/",
-            "농협": "https://banking.nonghyup.com/",
-            "NH": "https://banking.nonghyup.com/",
-            "엔에이치": "https://banking.nonghyup.com/",
-            "기업": "https://www.ibk.co.kr/",
-            "IBK": "https://www.ibk.co.kr/",
-            "카카오": "https://www.kakaobank.com/",
-            "토스": "https://www.tossbank.com/",
-            "케이": "https://www.kbanknow.com/",
-            "삼성": "https://www.samsungpop.com/",
-            "미래": "https://securities.miraeasset.com/",
-            "한국투자": "https://securities.koreainvestment.com/",
-            "키움": "https://www.kiwoom.com/",
-            "대신": "https://www.daishin.com/",
-            "메리츠": "https://home.meritz.co.kr/",
-            "부산": "https://www.busanbank.co.kr/",
-            "광주": "https://www.kjbank.com/",
-            "전북": "https://www.jbbank.co.kr/",
-            "SC": "https://www.standardchartered.co.kr/",
-            "대구": "https://www.dgb.co.kr/",
-            "경남": "https://www.knbank.co.kr/",
-            "수협": "https://suhyup-bank.com/",
-            "신협": "https://www.cu.co.kr/",
-            "우체국": "https://www.epostbank.go.kr/",
-            "새마을": "https://www.kfcc.co.kr/",
-            "한화": "https://www.hanwhawm.com/",
-            "유안타": "https://www.myasset.com/",
-            "유진": "https://www.eugenefn.com/",
-            "교보": "https://www.iprovest.com/",
-            "하이": "https://www.hi-ib.com/",
-            "현대": "https://www.hmsec.com/",
-            "DB": "https://www.db-fi.com/",
-            "SK": "https://www.sks.co.kr/",
-            "LS": "https://www.ls-sec.co.kr/",
-        }
-        
         link = f"https://search.naver.com/search.naver?query={product.company_name} {product.product_name}"
         
-        for key, url in company_urls.items():
+        for key, url in COMPANY_URLS.items():
             if key in product.company_name:
                 link = url
                 break

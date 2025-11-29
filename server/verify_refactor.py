@@ -5,11 +5,12 @@ import json
 from datetime import datetime
 
 # Add server directory to sys.path
-sys.path.append(os.path.abspath("c:/fisa/final-project/main-project-ai/server"))
+# Add server directory to sys.path
+sys.path.append(os.path.abspath(os.path.dirname(__file__)))
 
 from app.services.search_tools import search_deposits
 from app.services.products_service import products_service
-from app.services.chatbot_service import chatbot_service
+from app.services.chat_service import chat_service
 
 # Custom print function to log to file
 def log(message, end="\n"):
@@ -72,7 +73,7 @@ async def test_chatbot_service():
     log("Streaming Response:")
     
     try:
-        async for chunk in chatbot_service.stream_chat(user_id, session_id, message):
+        async for chunk in chat_service.stream_chat(user_id, session_id, message):
             if chunk["type"] == "token":
                 # Don't log every token to file to keep it clean, or log a dot
                 print(chunk["content"], end="", flush=True)
@@ -87,7 +88,7 @@ async def test_chatbot_service():
                 
         # Test History
         log("\n--- Testing Chat History ---")
-        history_docs = chatbot_service.chat_history_collection.find(
+        history_docs = chat_service.chat_history_collection.find(
             {"user_id": user_id, "session_id": session_id}
         ).sort("timestamp", 1)
         
