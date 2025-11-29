@@ -2,16 +2,16 @@
 스트리밍 챗봇 서비스
 LangGraph 기반 대화형 금융상품 추천 챗봇
 """
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, TypedDict, Annotated, Sequence
 from datetime import datetime
 from pymongo import MongoClient
-from langchain_core.messages import HumanMessage, AIMessage, BaseMessage, SystemMessage
+import operator
+import json
+import re
+
 from langchain_core.messages import HumanMessage, AIMessage, BaseMessage, SystemMessage
 from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import ToolNode
-from typing import TypedDict, Annotated, Sequence
-import operator
-import json
 
 from app.core.config import settings
 from app.db.vector_store import (
@@ -20,13 +20,11 @@ from app.db.vector_store import (
 )
 from app.services.user_vectorization_service import user_vectorization_service
 from app.services.products_service import products_service
-from app.services.search_tools import SEARCH_TOOLS
-from app.models.chatbot_models import ChatStreamChunk, ChatProduct
-
-
+from app.rag.retrievers.tools import SEARCH_TOOLS
+from app.schemas.chat import ChatStreamChunk, ChatProduct
 from app.core.llm_factory import get_llm
 
-class ChatbotService:
+class ChatService:
     def __init__(self):
         self.llm = get_llm(temperature=0.3, streaming=True)
         
@@ -39,40 +37,6 @@ class ChatbotService:
         self.tools = SEARCH_TOOLS
         self.llm_with_tools = self.llm.bind_tools(self.tools)
         
-        # LangGraph Agent
-        self.agent_graph = self._create_agent_graph()
-    
-    # _create_tools removed (using shared SEARCH_TOOLS)
-    
-    def _create_agent_graph(self):
-        """LangGraph Agent 생성"""
-        class AgentState(TypedDict):
-            messages: Annotated[Sequence[BaseMessage], operator.add]
-        
-        def agent_node(state: AgentState):
-            messages = state["messages"]
-            response = self.llm_with_tools.invoke(messages)
-            return {"messages": [response]}
-        
-        def should_continue(state: AgentState):
-            last_message = state["messages"][-1]
-            if hasattr(last_message, "tool_calls") and last_message.tool_calls:
-                return "continue"
-            return "end"
-        
-        workflow = StateGraph(AgentState)
-        workflow.add_node("agent", agent_node)
-        workflow.add_node("tools", ToolNode(self.tools))
-        workflow.set_entry_point("agent")
-        workflow.add_conditional_edges(
-            "agent",
-            should_continue,
-            {"continue": "tools", "end": END}
-        )
-        workflow.add_edge("tools", "agent")
-        
-        return workflow.compile()
-    
     def get_user_context(self, user_id: int, keywords: Optional[List[int]] = None) -> str:
         """사용자 컨텍스트 생성 (페르소나 + 추가 키워드)"""
         # 사용자 벡터 가져오기
@@ -365,7 +329,6 @@ class ChatbotService:
             full_response += buffer
             
             # 키워드 추출 및 제거
-            import re
             keywords_match = re.search(r'\[KEYWORDS:\s*(.*?)\]', full_response, re.DOTALL)
             suggested_keywords = ["다른 상품 추천", "상담 종료"] # 기본값
             
@@ -446,4 +409,4 @@ class ChatbotService:
         })
 
 
-chatbot_service = ChatbotService()
+chat_service = ChatService()

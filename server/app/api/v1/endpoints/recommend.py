@@ -2,7 +2,7 @@
 금융상품 추천 API 엔드포인트
 """
 from fastapi import APIRouter, HTTPException
-from app.models.recommendation import RecommendationResponse
+from app.schemas.recommendation import RecommendationResponse
 from app.services.products_service import products_service
 
 router = APIRouter(tags=["Recommendations"])
