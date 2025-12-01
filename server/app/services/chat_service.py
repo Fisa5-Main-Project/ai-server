@@ -178,21 +178,23 @@ class ChatService:
             
         return None
 
+    # Security Constants
+    MAX_MESSAGE_LENGTH = 1000
+    INJECTION_KEYWORDS = [
+        "ignore previous instructions", "system prompt", "시스템 프롬프트",
+        "ignore all instructions", "forget everything", "무시해",
+        "you are not", "당신은 이제부터", "DAN mode"
+    ]
+
     def validate_input(self, message: str) -> Optional[str]:
         """AI 입력 유효성 검사 (Prompt Injection 방지)"""
-        # 1. 길이 제한 (1000자)
-        if len(message) > 1000:
-            return "질문이 너무 깁니다. 1000자 이내로 입력해주세요."
+        # 1. 길이 제한
+        if len(message) > self.MAX_MESSAGE_LENGTH:
+            return f"질문이 너무 깁니다. {self.MAX_MESSAGE_LENGTH}자 이내로 입력해주세요."
             
         # 2. Prompt Injection 키워드 필터링
-        injection_keywords = [
-            "ignore previous instructions", "system prompt", "시스템 프롬프트",
-            "ignore all instructions", "forget everything", "무시해",
-            "you are not", "당신은 이제부터", "DAN mode"
-        ]
-        
         message_lower = message.lower()
-        for keyword in injection_keywords:
+        for keyword in self.INJECTION_KEYWORDS:
             if keyword in message_lower:
                 return "부적절한 요청이 감지되었습니다. 금융 상품 관련 질문만 해주세요."
                 

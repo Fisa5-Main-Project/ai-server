@@ -2,16 +2,15 @@
 스트리밍 챗봇 서비스
 LangGraph 기반 대화형 금융상품 추천 챗봇
 """
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, TypedDict, Annotated, Sequence
 from datetime import datetime
 from pymongo import MongoClient
 from langchain_core.messages import HumanMessage, AIMessage, BaseMessage, SystemMessage
-from langchain_core.messages import HumanMessage, AIMessage, BaseMessage, SystemMessage
 from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import ToolNode
-from typing import TypedDict, Annotated, Sequence
 import operator
 import json
+import re
 
 from app.core.config import settings
 from app.db.vector_store import (
@@ -20,8 +19,8 @@ from app.db.vector_store import (
 )
 from app.services.user_vectorization_service import user_vectorization_service
 from app.services.products_service import products_service
-from app.services.search_tools import SEARCH_TOOLS
-from app.models.chatbot_models import ChatStreamChunk, ChatProduct
+from app.rag.retrievers.tools import SEARCH_TOOLS
+from app.schemas.chat import ChatStreamChunk, ChatProduct
 
 
 from app.core.llm_factory import get_llm
@@ -197,6 +196,28 @@ class ChatbotService:
             
         return None
 
+    # Security Constants
+    MAX_MESSAGE_LENGTH = 1000
+    INJECTION_KEYWORDS = [
+        "ignore previous instructions", "system prompt", "시스템 프롬프트",
+        "ignore all instructions", "forget everything", "무시해",
+        "you are not", "당신은 이제부터", "DAN mode"
+    ]
+
+    def validate_input(self, message: str) -> Optional[str]:
+        """AI 입력 유효성 검사 (Prompt Injection 방지)"""
+        # 1. 길이 제한
+        if len(message) > self.MAX_MESSAGE_LENGTH:
+            return f"질문이 너무 깁니다. {self.MAX_MESSAGE_LENGTH}자 이내로 입력해주세요."
+            
+        # 2. Prompt Injection 키워드 필터링
+        message_lower = message.lower()
+        for keyword in self.INJECTION_KEYWORDS:
+            if keyword in message_lower:
+                return "부적절한 요청이 감지되었습니다. 금융 상품 관련 질문만 해주세요."
+                
+        return None
+
     async def stream_chat(
         self,
         user_id: int,
@@ -206,6 +227,15 @@ class ChatbotService:
     ):
         """스트리밍 챗봇 응답 (실제 LLM 스트리밍 + RAG 추천)"""
         
+        # 0. 보안 검증
+        validation_error = self.validate_input(message)
+        if validation_error:
+            yield {
+                "type": "error",
+                "content": validation_error
+            }
+            return
+
         # 1. 금융상품 질문 검증 (그만 물어보기 예외 처리)
         if message == "그만 물어보기":
             yield {
