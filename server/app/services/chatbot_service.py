@@ -2,17 +2,16 @@
 스트리밍 챗봇 서비스
 LangGraph 기반 대화형 금융상품 추천 챗봇
 """
-from typing import List, Dict, Optional, TypedDict, Annotated, Sequence
+from typing import List, Dict, Optional
 from datetime import datetime
 from pymongo import MongoClient
-import operator
-import json
-import re
-from sqlalchemy import create_engine, text
-
+from langchain_core.messages import HumanMessage, AIMessage, BaseMessage, SystemMessage
 from langchain_core.messages import HumanMessage, AIMessage, BaseMessage, SystemMessage
 from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import ToolNode
+from typing import TypedDict, Annotated, Sequence
+import operator
+import json
 
 from app.core.config import settings
 from app.db.vector_store import (
@@ -21,11 +20,13 @@ from app.db.vector_store import (
 )
 from app.services.user_vectorization_service import user_vectorization_service
 from app.services.products_service import products_service
-from app.rag.retrievers.tools import SEARCH_TOOLS
-from app.schemas.chat import ChatStreamChunk, ChatProduct
+from app.services.search_tools import SEARCH_TOOLS
+from app.models.chatbot_models import ChatStreamChunk, ChatProduct
+
+
 from app.core.llm_factory import get_llm
 
-class ChatService:
+class ChatbotService:
     def __init__(self):
         self.llm = get_llm(temperature=0.3, streaming=True)
         
@@ -34,13 +35,44 @@ class ChatService:
         self.chat_logs_collection = self.db["chat_logs"]
         self.chat_history_collection = self.db["chat_history"]
         
-        # MySQL Engine (Reuse)
-        self.mysql_engine = create_engine(settings.MYSQL_DB_URL)
-        
         # Vector Search Tools (Shared)
         self.tools = SEARCH_TOOLS
         self.llm_with_tools = self.llm.bind_tools(self.tools)
         
+        # LangGraph Agent
+        self.agent_graph = self._create_agent_graph()
+    
+    # _create_tools removed (using shared SEARCH_TOOLS)
+    
+    def _create_agent_graph(self):
+        """LangGraph Agent 생성"""
+        class AgentState(TypedDict):
+            messages: Annotated[Sequence[BaseMessage], operator.add]
+        
+        def agent_node(state: AgentState):
+            messages = state["messages"]
+            response = self.llm_with_tools.invoke(messages)
+            return {"messages": [response]}
+        
+        def should_continue(state: AgentState):
+            last_message = state["messages"][-1]
+            if hasattr(last_message, "tool_calls") and last_message.tool_calls:
+                return "continue"
+            return "end"
+        
+        workflow = StateGraph(AgentState)
+        workflow.add_node("agent", agent_node)
+        workflow.add_node("tools", ToolNode(self.tools))
+        workflow.set_entry_point("agent")
+        workflow.add_conditional_edges(
+            "agent",
+            should_continue,
+            {"continue": "tools", "end": END}
+        )
+        workflow.add_edge("tools", "agent")
+        
+        return workflow.compile()
+    
     def get_user_context(self, user_id: int, keywords: Optional[List[int]] = None) -> str:
         """사용자 컨텍스트 생성 (페르소나 + 추가 키워드)"""
         # 사용자 벡터 가져오기
@@ -54,7 +86,10 @@ class ChatService:
             # 추가 키워드가 있다면 포함
             if keywords:
                 try:
-                    with self.mysql_engine.connect() as conn:
+                    from sqlalchemy import create_engine, text
+                    engine = create_engine(settings.MYSQL_DB_URL)
+                    
+                    with engine.connect() as conn:
                         keyword_names = []
                         for keyword_id in keywords:
                             result = conn.execute(
@@ -75,7 +110,7 @@ class ChatService:
             return "사용자의 금융 상황을 알려주시면 더 정확한 추천을 해드릴 수 있습니다."
     
     def get_chat_history(self, user_id: int, session_id: str, limit: int = 10) -> List[BaseMessage]:
-        """대화 히스토리 가져오기 (LLM Context용)"""
+        """대화 히스토리 가져오기"""
         history_docs = self.chat_history_collection.find(
             {"user_id": user_id, "session_id": session_id}
         ).sort("timestamp", -1).limit(limit)
@@ -88,22 +123,6 @@ class ChatService:
                 messages.append(AIMessage(content=doc["content"]))
         
         return messages
-
-    def get_paginated_chat_history(self, user_id: int, session_id: str, limit: int, skip: int) -> list:
-        """대화 히스토리 조회 (API 반환용, 페이지네이션)"""
-        history_docs = self.chat_history_collection.find(
-            {"user_id": user_id, "session_id": session_id}
-        ).sort("timestamp", -1).skip(skip).limit(limit)
-        
-        history = []
-        for doc in history_docs:
-            history.append({
-                "role": doc["role"],
-                "content": doc["content"],
-                "timestamp": doc["timestamp"].isoformat()
-            })
-            
-        return history[::-1]
     
     def save_message(self, user_id: int, session_id: str, role: str, content: str):
         """메시지 저장"""
@@ -120,7 +139,7 @@ class ChatService:
         financial_keywords = [
             "예금", "적금", "연금", "펀드", "투자", "저축", "금리", "수익",
             "은퇴", "노후", "자산", "재테크", "금융", "상품", "추천",
-            "보험", "ETF", "채권", "주식", "ISA", "IRP", "CMA", "MMDA",
+            "보험", "ETF", "채권", "주식", "ISA", "IRP", "CMA", "MMDA","TDF",
             "세금", "세액공제", "비과세", "이자", "배당", "수수료",
             "만기", "가입", "해지", "상담", "은행", "증권", "포트폴리오",
             "목돈", "굴리기", "모으기", "불리기", "노후준비", "은퇴자금"
@@ -178,26 +197,6 @@ class ChatService:
             
         return None
 
-    def validate_input(self, message: str) -> Optional[str]:
-        """AI 입력 유효성 검사 (Prompt Injection 방지)"""
-        # 1. 길이 제한 (1000자)
-        if len(message) > 1000:
-            return "질문이 너무 깁니다. 1000자 이내로 입력해주세요."
-            
-        # 2. Prompt Injection 키워드 필터링
-        injection_keywords = [
-            "ignore previous instructions", "system prompt", "시스템 프롬프트",
-            "ignore all instructions", "forget everything", "무시해",
-            "you are not", "당신은 이제부터", "DAN mode"
-        ]
-        
-        message_lower = message.lower()
-        for keyword in injection_keywords:
-            if keyword in message_lower:
-                return "부적절한 요청이 감지되었습니다. 금융 상품 관련 질문만 해주세요."
-                
-        return None
-
     async def stream_chat(
         self,
         user_id: int,
@@ -207,15 +206,6 @@ class ChatService:
     ):
         """스트리밍 챗봇 응답 (실제 LLM 스트리밍 + RAG 추천)"""
         
-        # 0. 보안 검증
-        validation_error = self.validate_input(message)
-        if validation_error:
-            yield {
-                "type": "error",
-                "content": validation_error
-            }
-            return
-
         # 1. 금융상품 질문 검증 (그만 물어보기 예외 처리)
         if message == "그만 물어보기":
             yield {
@@ -375,6 +365,7 @@ class ChatService:
             full_response += buffer
             
             # 키워드 추출 및 제거
+            import re
             keywords_match = re.search(r'\[KEYWORDS:\s*(.*?)\]', full_response, re.DOTALL)
             suggested_keywords = ["다른 상품 추천", "상담 종료"] # 기본값
             
@@ -426,6 +417,10 @@ class ChatService:
             # 10. AI 응답 저장
             self.save_message(user_id, session_id, "assistant", full_response)
             
+            print(f"DEBUG: Full Chat Response: {full_response}")
+            if feature_guide:
+                print(f"DEBUG: Feature Guide: {feature_guide}")
+            
             # 11. 완료 신호
             yield {
                 "type": "done",
@@ -451,4 +446,4 @@ class ChatService:
         })
 
 
-chat_service = ChatService()
+chatbot_service = ChatbotService()
