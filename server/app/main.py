@@ -6,6 +6,7 @@ app = FastAPI(
     title="노후하우 AI 추천 서버",
     description="RAG와 Gemini를 이용한 개인 맞춤형 금융상품 추천 API",
     version="2.0.0",
+    root_path="/api"
     docs_url="/docs",
     redoc_url="/redoc"
 )
