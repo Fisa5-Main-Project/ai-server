@@ -12,14 +12,25 @@ class Settings(BaseSettings):
 
     # 1. Gemini LLM 설정
     GEMINI_API_KEY: str
+    GROQ_API_KEY: str | None = None
+    LLM_PROVIDER: str = "gemini"  # "gemini"나 "groq"으로 바꾸면 LLM모델을 변경할 수 있습니다.
 
     # 2. MongoDB (VectorDB) 설정
-    MONGO_DB_URL: str
-    DB_NAME: str
+    MONGO_DB_NAME: str
+    MONGO_USERNAME: str
+    MONGO_PASSWORD: str
+    MONGO_HOST: str
+
+    @property
+    def MONGO_DB_URL(self):
+        return f"mongodb+srv://{self.MONGO_USERNAME}:{self.MONGO_PASSWORD}@{self.MONGO_HOST}"
+    
+    @property
+    def DB_NAME(self):
+        """MongoDB 데이터베이스 이름"""
+        return self.MONGO_DB_NAME
 
     # 3. MySQL (User Profile DB) 설정
     MYSQL_DB_URL: str
-    
-    # (API 키는 Airflow Variables에서만 사용하므로 여기서는 제거)
-
+   
 settings = Settings()
