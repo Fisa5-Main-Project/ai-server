@@ -158,28 +158,29 @@ class UserVectorizationService:
                 user_data = self.get_user_data_from_db(user_id)
                 print(f"[User {user_id}] DB 조회 성공")
             except Exception as db_error:
-                print(f"[User {user_id}] DB 조회 실패: {db_error}")
-                # DB 조회 실패 시 더미 데이터 사용 (테스트용)
-                print(f"[User {user_id}] 더미 데이터 사용")
-                user_data = {
-                    "user": {
-                        "birth": "2001-03-24",
-                        "gender": "M",
-                        "investment_tendancy": "안정추구형",
-                        "asset_total": 711200000
-                    },
-                    "user_info": {
-                        "annual_income": 1332,
-                        "expectation_monthly_cost": 333333,
-                        "target_retired_age": 65,
-                        "goal_amount": 1000000000
-                    },
-                    "keywords": [
-                        {"name": "안정적 생활비"},
-                        {"name": "여행"},
-                        {"name": "가족/교류"}
-                    ]
-                }
+                # print(f"[User {user_id}] DB 조회 실패: {db_error}")
+                # # DB 조회 실패 시 더미 데이터 사용 (테스트용)
+                # print(f"[User {user_id}] 더미 데이터 사용")
+                # user_data = {
+                #     "user": {
+                #         "birth": "2001-03-24",
+                #         "gender": "M",
+                #         "investment_tendancy": "안정추구형",
+                #         "asset_total": 711200000
+                #     },
+                #     "user_info": {
+                #         "annual_income": 1332,
+                #         "expectation_monthly_cost": 333333,
+                #         "target_retired_age": 65,
+                #         "goal_amount": 1000000000
+                #     },
+                #     "keywords": [
+                #         {"name": "안정적 생활비"},
+                #         {"name": "여행"},
+                #         {"name": "가족/교류"}
+                #     ]
+                # }
+                raise ValueError(f"User {user_id}의 데이터베이스 조회에 실패했습니다.")
             
             # 2. 페르소나 텍스트 생성
             persona_text = self.generate_persona_text(user_data)

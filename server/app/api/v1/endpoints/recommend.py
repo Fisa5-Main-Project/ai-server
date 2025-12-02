@@ -38,4 +38,4 @@ async def get_recommendations(user_id: int):
         print("recommendations", recommendations)
         return recommendations
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"추천 실패: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"추천 실패: 문제가 발생하였습니다.")
