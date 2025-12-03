@@ -1,4 +1,4 @@
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 from datetime import datetime, timedelta
 from pymongo import MongoClient
 from sqlalchemy import create_engine, text
@@ -18,51 +18,62 @@ class AdminService:
         
         self.mysql_engine = create_engine(settings.MYSQL_DB_URL)
 
-        # Connection check and fix for local dev (mysql_db -> localhost)
-        try:
-            with self.mysql_engine.connect() as conn:
-                pass
-        except Exception as e:
-            error_msg = str(e)
-            if "getaddrinfo failed" in error_msg and "mysql_db" in settings.MYSQL_DB_URL:
-                logger.warning("Warning: 'mysql_db' host not found. Trying 'localhost'...")
-                new_url = settings.MYSQL_DB_URL.replace("mysql_db", "localhost")
-                self.mysql_engine = create_engine(new_url)
-                try:
-                    with self.mysql_engine.connect() as conn:
-                        logger.info("Successfully connected to MySQL via localhost.")
-                except Exception as e2:
-                    logger.error(f"Failed to connect to localhost as well: {e2}")
-            else:
-                logger.error(f"MySQL Connection Error: {e}")
-
-    def get_dashboard_stats(self) -> Dict:
+    def get_dashboard_stats(self) -> Dict[str, Any]:
         """대시보드 전체 통계"""
         now = datetime.utcnow()
         last_month = now - timedelta(days=30)
         
-        # 1. 총 대화 건수 (세션 수 기준이 아닌 메시지 수 기준)
-        total_chats = self.chat_history.count_documents({"role": "user"})
+        # 1. Chat History 통계 (총 대화, API 요청, 활성 사용자)
+        history_pipeline = [
+            {
+                "$facet": {
+                    "counts": [
+                        {
+                            "$group": {
+                                "_id": None,
+                                "total_chats": {"$sum": {"$cond": [{"$eq": ["$role", "user"]}, 1, 0]}},
+                                "total_api_calls": {"$sum": {"$cond": [{"$eq": ["$role", "assistant"]}, 1, 0]}}
+                            }
+                        }
+                    ],
+                    "active_users": [
+                        {"$match": {"timestamp": {"$gte": last_month}}},
+                        {"$group": {"_id": "$user_id"}},
+                        {"$count": "count"}
+                    ]
+                }
+            }
+        ]
         
-        # 2. 총 API 요청 (챗봇 응답 수)
-        total_api_calls = self.chat_history.count_documents({"role": "assistant"})
+        history_results = list(self.chat_history.aggregate(history_pipeline))
+        stats = history_results[0]
         
-        # 3. 평균 만족도 (좋아요 비율)
-        total_feedback = self.chat_logs.count_documents({"feedback": {"$in": ["like", "dislike"]}})
-        likes = self.chat_logs.count_documents({"feedback": "like"})
-        satisfaction_rate = (likes / total_feedback * 100) if total_feedback > 0 else 0
+        counts = stats["counts"][0] if stats["counts"] else {"total_chats": 0, "total_api_calls": 0}
+        active_users_count = stats["active_users"][0]["count"] if stats["active_users"] else 0
         
-        # 4. 활성 사용자 (최근 30일 내 대화한 사용자)
-        active_users = len(self.chat_history.distinct("user_id", {"timestamp": {"$gte": last_month}}))
+        # 2. Feedback 통계 (평균 만족도)
+        feedback_pipeline = [
+            {
+                "$group": {
+                    "_id": None,
+                    "total": {"$sum": {"$cond": [{"$in": ["$feedback", ["like", "dislike"]]}, 1, 0]}},
+                    "likes": {"$sum": {"$cond": [{"$eq": ["$feedback", "like"]}, 1, 0]}}
+                }
+            }
+        ]
+        feedback_results = list(self.chat_logs.aggregate(feedback_pipeline))
+        fb_stats = feedback_results[0] if feedback_results else {"total": 0, "likes": 0}
+        
+        satisfaction_rate = (fb_stats["likes"] / fb_stats["total"] * 100) if fb_stats["total"] > 0 else 0
         
         return {
-            "total_chats": total_chats,
-            "total_api_calls": total_api_calls,
+            "total_chats": counts["total_chats"],
+            "total_api_calls": counts["total_api_calls"],
             "satisfaction_rate": round(satisfaction_rate, 1),
-            "active_users": active_users
+            "active_users": active_users_count
         }
 
-    def get_dashboard_trends(self) -> Dict:
+    def get_dashboard_trends(self) -> Dict[str, Any]:
         """대화 및 API 요청 추이 (최근 6개월)"""
         pipeline = [
             {

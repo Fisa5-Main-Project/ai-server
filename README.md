@@ -94,7 +94,7 @@ main-project-ai/
 ### Airflow 실행
 ```bash
 # airflow 루트에서 실행
-docker-compose -f docker-compose.local.yaml up -d --build
+docker-compose up -d --build
 ```
 
 ### 개별 실행 (Server Only)
