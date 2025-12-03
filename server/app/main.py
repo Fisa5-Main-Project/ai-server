@@ -15,7 +15,8 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:3000",  # Next.js (local dev)
+        "http://localhost:3000",  # 로컬 메인 클라이언트
+        "http://localhost:3001",  # 로컬 관리자
         "http://127.0.0.1:3000",  # Next.js (local dev - alternative)
         "https://fisa-main-project.vercel.app",  # Vercel (dev/preview)
         "https://knowwhohow.cloud",  # Production
