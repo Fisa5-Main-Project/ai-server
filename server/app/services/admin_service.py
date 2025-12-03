@@ -3,9 +3,13 @@ from datetime import datetime, timedelta
 from pymongo import MongoClient
 from sqlalchemy import create_engine, text
 from app.core.config import settings
-import pandas as pd
+import logging
+
+logger = logging.getLogger(__name__)
 
 class AdminService:
+    LAST_MESSAGE_TRUNCATE_LENGTH = 50
+
     def __init__(self):
         self.mongo_client = MongoClient(settings.MONGO_DB_URL)
         self.db = self.mongo_client[settings.MONGO_DB_NAME]
@@ -21,16 +25,16 @@ class AdminService:
         except Exception as e:
             error_msg = str(e)
             if "getaddrinfo failed" in error_msg and "mysql_db" in settings.MYSQL_DB_URL:
-                print("Warning: 'mysql_db' host not found. Trying 'localhost'...")
+                logger.warning("Warning: 'mysql_db' host not found. Trying 'localhost'...")
                 new_url = settings.MYSQL_DB_URL.replace("mysql_db", "localhost")
                 self.mysql_engine = create_engine(new_url)
                 try:
                     with self.mysql_engine.connect() as conn:
-                        print("Successfully connected to MySQL via localhost.")
+                        logger.info("Successfully connected to MySQL via localhost.")
                 except Exception as e2:
-                    print(f"Failed to connect to localhost as well: {e2}")
+                    logger.error(f"Failed to connect to localhost as well: {e2}")
             else:
-                print(f"MySQL Connection Error: {e}")
+                logger.error(f"MySQL Connection Error: {e}")
 
     def get_dashboard_stats(self) -> Dict:
         """대시보드 전체 통계"""
@@ -114,32 +118,64 @@ class AdminService:
             # 1. MySQL에서 사용자 목록 조회
             with self.mysql_engine.connect() as conn:
                 query = "SELECT user_id, name, login_id FROM users"
-                params = {}
+                params = {"limit": limit, "offset": offset}
                 
                 if search:
                     query += " WHERE name LIKE :search OR login_id LIKE :search"
                     params["search"] = f"%{search}%"
                 
-                query += f" LIMIT {limit} OFFSET {offset}"
+                query += " LIMIT :limit OFFSET :offset"
                 
                 users = conn.execute(text(query), params).fetchall()
                 
                 # 전체 카운트 (페이지네이션용)
                 count_query = "SELECT COUNT(*) FROM users"
+                count_params = {}
                 if search:
                     count_query += " WHERE name LIKE :search OR login_id LIKE :search"
-                total_users = conn.execute(text(count_query), params).scalar()
+                    count_params["search"] = f"%{search}%"
+                total_users = conn.execute(text(count_query), count_params).scalar()
+
+            if not users:
+                return {
+                    "users": [],
+                    "total": total_users,
+                    "page": page,
+                    "limit": limit
+                }
+
+            user_ids = [u[0] for u in users]
+            user_map = {u[0]: {"name": u[1], "login_id": u[2]} for u in users}
+
+            # 2. MongoDB Aggregation으로 통계 한 번에 조회 (N+1 해결)
+            pipeline = [
+                {"$match": {"user_id": {"$in": user_ids}}},
+                {"$group": {
+                    "_id": "$user_id",
+                    "chat_count": {"$sum": {"$cond": [{"$eq": ["$role", "user"]}, 1, 0]}},
+                    "api_count": {"$sum": {"$cond": [{"$eq": ["$role", "assistant"]}, 1, 0]}}
+                }}
+            ]
+            chat_stats = {item["_id"]: item for item in self.chat_history.aggregate(pipeline)}
+
+            # 피드백 통계도 한 번에 조회
+            feedback_pipeline = [
+                {"$match": {"user_id": {"$in": user_ids}}},
+                {"$group": {
+                    "_id": "$user_id",
+                    "likes": {"$sum": {"$cond": [{"$eq": ["$feedback", "like"]}, 1, 0]}},
+                    "dislikes": {"$sum": {"$cond": [{"$eq": ["$feedback", "dislike"]}, 1, 0]}}
+                }}
+            ]
+            feedback_stats = {item["_id"]: item for item in self.chat_logs.aggregate(feedback_pipeline)}
 
             user_list = []
-            for user in users:
-                user_id = user[0]
+            for user_id in user_ids:
+                c_stat = chat_stats.get(user_id, {"chat_count": 0, "api_count": 0})
+                f_stat = feedback_stats.get(user_id, {"likes": 0, "dislikes": 0})
                 
-                # MongoDB에서 해당 사용자의 통계 집계
-                chat_count = self.chat_history.count_documents({"user_id": user_id, "role": "user"})
-                api_count = self.chat_history.count_documents({"user_id": user_id, "role": "assistant"})
-                
-                likes = self.chat_logs.count_documents({"user_id": user_id, "feedback": "like"})
-                dislikes = self.chat_logs.count_documents({"user_id": user_id, "feedback": "dislike"})
+                likes = f_stat.get("likes", 0)
+                dislikes = f_stat.get("dislikes", 0)
                 
                 satisfaction = 0
                 if likes + dislikes > 0:
@@ -147,10 +183,10 @@ class AdminService:
                 
                 user_list.append({
                     "user_id": user_id,
-                    "name": user[1],
-                    "login_id": user[2],
-                    "chat_count": chat_count,
-                    "api_count": api_count,
+                    "name": user_map[user_id]["name"],
+                    "login_id": user_map[user_id]["login_id"],
+                    "chat_count": c_stat.get("chat_count", 0),
+                    "api_count": c_stat.get("api_count", 0),
                     "likes": likes,
                     "dislikes": dislikes,
                     "satisfaction": round(satisfaction, 1)
@@ -163,9 +199,7 @@ class AdminService:
                 "limit": limit
             }
         except Exception as e:
-            import traceback
-            print(f"Error in get_user_stats: {e}")
-            print(traceback.format_exc())
+            logger.error(f"Error in get_user_stats: {e}", exc_info=True)
             raise e
 
     def get_chat_logs(self, page: int = 1, limit: int = 10, search: str = "") -> Dict:
@@ -194,27 +228,43 @@ class AdminService:
             
             agg_results = list(self.chat_history.aggregate(pipeline))
             
-            # 사용자 정보 매핑
+            if not agg_results:
+                 return {
+                    "logs": [],
+                    "page": page,
+                    "limit": limit
+                }
+
+            # 사용자 정보 매핑 (N+1 해결)
+            user_ids = [r["_id"] for r in agg_results]
+            user_name_map = {}
+            
+            try:
+                with self.mysql_engine.connect() as conn:
+                    # WHERE IN 절 사용
+                    query = text("SELECT user_id, name FROM users WHERE user_id IN :user_ids")
+                    # SQLAlchemy의 IN 절 처리를 위해 tuple로 변환하거나 expandparam 사용 필요하지만
+                    # text() 사용시에는 :user_ids에 리스트를 넘기면 됨 (driver 지원 여부에 따라 다름)
+                    # pymysql/sqlalchemy 조합에서는 리스트 전달 시 자동으로 처리됨
+                    users = conn.execute(query, {"user_ids": user_ids}).fetchall()
+                    for u in users:
+                        user_name_map[u[0]] = u[1]
+            except Exception as db_e:
+                logger.error(f"MySQL Error in get_chat_logs: {db_e}")
+            
             logs = []
             for r in agg_results:
                 user_id = r["_id"]
+                user_name = user_name_map.get(user_id, f"Unknown({user_id})")
                 
-                # MySQL에서 사용자 이름 조회
-                try:
-                    with self.mysql_engine.connect() as conn:
-                        user = conn.execute(
-                            text("SELECT name FROM users WHERE user_id = :uid"),
-                            {"uid": user_id}
-                        ).first()
-                        user_name = user[0] if user else f"Unknown({user_id})"
-                except Exception as db_e:
-                    print(f"MySQL Error in get_chat_logs for user {user_id}: {db_e}")
-                    user_name = f"Error({user_id})"
-                
+                last_msg = r["last_message"]
+                if len(last_msg) > self.LAST_MESSAGE_TRUNCATE_LENGTH:
+                    last_msg = last_msg[:self.LAST_MESSAGE_TRUNCATE_LENGTH] + "..."
+
                 logs.append({
                     "user_id": user_id,
                     "name": user_name,
-                    "last_message": r["last_message"][:50] + "..." if len(r["last_message"]) > 50 else r["last_message"],
+                    "last_message": last_msg,
                     "last_active": r["last_active"].isoformat(),
                     "total_messages": r["total_messages"]
                 })
@@ -225,9 +275,7 @@ class AdminService:
                 "limit": limit
             }
         except Exception as e:
-            import traceback
-            print(f"Error in get_chat_logs: {e}")
-            print(traceback.format_exc())
+            logger.error(f"Error in get_chat_logs: {e}", exc_info=True)
             raise e
 
     def get_user_chat_history(self, user_id: int, page: int = 1, limit: int = 20) -> Dict:
@@ -242,14 +290,7 @@ class AdminService:
                      .limit(limit))
         
         history = []
-        for chat in reversed(chats): # UI에서는 과거->현재 순으로 보여주는게 일반적이지만, 페이징은 최신순으로 가져와서 뒤집는게 나을수도. 
-            # 하지만 보통 채팅 로그는 위로 스크롤하며 과거를 로딩하거나, 아래로 스크롤하며 최신을 로딩함.
-            # 관리자 페이지라면 최신순으로 리스트를 보여주거나, 
-            # 전체 대화 흐름을 보려면 과거 -> 현재 순이어야 함.
-            # 요청사항: "나눠서 보내주세요" -> 페이지네이션.
-            # 여기서는 최신순으로 가져와서 반환하되, 클라이언트가 정렬하도록 하거나
-            # timestamp 기준으로 정렬해서 반환.
-            # 일단 최신순으로 가져온 것을 다시 시간순(과거->현재)으로 정렬해서 반환하는게 보기 좋음.
+        for chat in reversed(chats): 
             history.append({
                 "role": chat["role"],
                 "content": chat["content"],

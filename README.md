@@ -74,12 +74,12 @@ main-project-ai/
 
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
-| `GET` | `/api/admin/stats/overview` | 대시보드 전체 통계 조회 |
-| `GET` | `/api/admin/stats/trends` | 대화 및 API 요청 추이 조회 |
-| `GET` | `/api/admin/stats/feedback` | 피드백 분포 조회 |
-| `GET` | `/api/admin/users` | 사용자별 AI 사용 통계 조회 |
-| `GET` | `/api/admin/logs` | 챗봇 대화 로그 목록 조회 |
-| `GET` | `/api/admin/logs/{user_id}` | 특정 사용자의 대화 상세 내역 조회 |
+| `GET` | `/api/v1/admin/stats/overview` | 대시보드 전체 통계 조회 |
+| `GET` | `/api/v1/admin/stats/trends` | 대화 및 API 요청 추이 조회 |
+| `GET` | `/api/v1/admin/stats/feedback` | 피드백 분포 조회 |
+| `GET` | `/api/v1/admin/users` | 사용자별 AI 사용 통계 조회 |
+| `GET` | `/api/v1/admin/logs` | 챗봇 대화 로그 목록 조회 |
+| `GET` | `/api/v1/admin/logs/{user_id}` | 특정 사용자의 대화 상세 내역 조회 |
 
 ## 6. 배포 정보
 - **Production URL**: [https://knowwhohow.cloud](https://knowwhohow.cloud)
