@@ -237,7 +237,7 @@ class ChatService:
 
         if message == "처음으로":
             import random
-            random_terms = ["ETF", "채권", "ISA", "IRP", "CMA", "MMDA"]
+            random_terms = ["ETF", "ISA", "IRP", "CMA", "MMDA"]
             selected_term = random.choice(random_terms)
             
             welcome_msg = "저는 금융상품 추천 전문 AI입니다. 예금, 적금, 연금, 펀드 등 금융상품이나, 금융 상품 관련 정보에 대해 질문해주세요."
@@ -342,7 +342,7 @@ class ChatService:
    - **단, '처음으로' 요청 시에는 ['예금/적금 추천', '연금저축 추천', '금융 지식 알아보기']와 같이 초기 키워드만 제시하세요.**
    
    FORMAT: [KEYWORDS: 키워드1, 키워드2, 키워드3, 키워드4, ...]
-   예시: [KEYWORDS: 다른 상품 추천, 가입 방법, 처음으로, TDF란?, 비보장 상품이란?, EFT란?]
+   예시: [KEYWORDS: 다른 상품 추천, 가입 방법, 처음으로, TDF란?, 일자리 추천 받기비보장 상품이란?, EFT란?, ]
 """
         
         # 7. 메시지 구성
