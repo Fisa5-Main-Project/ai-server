@@ -23,6 +23,7 @@ app.add_middleware(
         "https://www.knowwhohow.cloud",
         "https://knowwhohow.site",  # Production (alternative)
         "https://www.knowwhohow.site",
+        "https://knowwhohow.cloud/ai",
     ],
     allow_credentials=True,
     allow_methods=["*"],
