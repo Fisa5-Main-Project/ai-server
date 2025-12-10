@@ -116,11 +116,13 @@ class ChatService:
         })
     
     def is_financial_question(self, message: str) -> bool:
-        """금융상품 관련 질문인지 판단 (강화된 검증)"""
+        #금융상품 관련 질문인지 판단
         financial_keywords = [
             "예금", "적금", "연금", "펀드", "투자", "저축", "금리", "수익",
             "은퇴", "노후", "자산", "재테크", "금융", "상품", "추천",
             "보험", "ETF", "채권", "주식", "ISA", "IRP", "CMA", "MMDA",
+            "계좌", "뱅킹", "대출", "신용", "카드", "보험", "대출",
+            "인터넷 뱅킹", "카드", 
             "세금", "세액공제", "비과세", "이자", "배당", "수수료",
             "만기", "가입", "해지", "상담", "은행", "증권", "포트폴리오",
             "목돈", "굴리기", "모으기", "불리기", "노후준비", "은퇴자금",
@@ -130,7 +132,7 @@ class ChatService:
         # 키워드 매칭
         has_financial_keyword = any(keyword in message for keyword in financial_keywords)
         
-        # 비금융 키워드 (더 명확한 거부)
+        # 비금융 키워드 
         non_financial_keywords = [
             "날씨", "맛집", "영화", "음악", "게임", "스포츠",
             "뉴스", "정치", "연예", "여행지", "농담", "유머",
@@ -167,7 +169,7 @@ class ChatService:
             }
             
         # 3. 일자리/위치 (Job/Location)
-        if any(k in message for k in ["일자리", "취업", "알바", "근처", "위치"]):
+        if any(k in message for k in ["일자리", "소일거리", "취업", "알바", "근처", "위치"]):
             return {
                 "type": "feature_guide",
                 "title": "내 주변 일자리 찾기",
@@ -179,12 +181,15 @@ class ChatService:
             
         return None
 
-    # Security Constants
+    # 보안 공격 차단
     MAX_MESSAGE_LENGTH = 1000
     INJECTION_KEYWORDS = [
         "ignore previous instructions", "system prompt", "시스템 프롬프트",
         "ignore all instructions", "forget everything", "무시해",
-        "you are not", "당신은 이제부터", "DAN mode"
+        "you are not", "당신은 이제부터", "DAN mode",
+        "os.environ", "environ", "os.", "sys.", "subprocess", "print(", "exec(",
+        "API KEY", "SECRET", "credential", "password", "auth token",
+        "developer mode", "simul game", "roleplay as root"
     ]
 
     def validate_input(self, message: str) -> Optional[str]:
@@ -342,8 +347,34 @@ class ChatService:
    - **단, '처음으로' 요청 시에는 ['예금/적금 추천', '연금저축 추천', '금융 지식 알아보기']와 같이 초기 키워드만 제시하세요.**
    
    FORMAT: [KEYWORDS: 키워드1, 키워드2, 키워드3, 키워드4, ...]
-   예시: [KEYWORDS: 다른 상품 추천, 가입 방법, 처음으로, TDF란?, 일자리 추천 받기비보장 상품이란?, EFT란?, ]
+   예시: [KEYWORDS: 다른 상품 추천, 가입 방법, 처음으로, TDF란?, 일자리 추천 받기, 비보장 상품이란?, EFT란? ]
 """
+
+        # 7.1 포트폴리오/자산 분석 요청 감지 및 프롬프트 강화
+        is_portfolio_analysis = any(k in message for k in ["자산", "포트폴리오", "내 돈", "진단", "분석", "재산"])
+        if is_portfolio_analysis:
+            system_prompt += """
+            
+            [특별 지침: 자산/포트폴리오 분석 요청 시]
+            사용자가 자신의 자산 현황이나 포트폴리오 분석을 요청했습니다. 다음 지침에 따라 **'자산 포트폴리오 전문가처럼'** 분석해주세요.
+            
+            1. **Markdown 표 작성 (필수)**:
+               - 사용자의 자산 정보를 바탕으로 [자산 종류 | 금액 | 비중(%)] 컬럼을 가진 표를 작성하세요.
+               - 비중은 총 자산 대비 비율을 계산하여 표시하세요.
+            
+            2. **시각적 요약**:
+               - 자산 구성을 한눈에 파악할 수 있도록 이모지(💰, 🏠, 📉 등)를 적극 활용하세요.
+               - 예: "부동산(🏠) 비중이 높습니다."
+            
+            3. **전문적인 진단 및 조언 (3가지)**:
+               - 사용자의 나이, 목표(은퇴 등), 투자 성향을 고려하여 앞으로의 자산 증식 방향에 대한 구체적인 조언 3가지를 제시하세요.
+               - 예: "30대이시므로 공격적인 투자 비중을 10% 정도 늘리는 것을 추천합니다."
+               - 예: "은퇴가 5년 남으셨으므로 현금 흐름 확보를 위해 연금 비중을 높이세요."
+            
+            4. **톤앤매너**:
+               - 전문적인 PB(Private Banker)처럼 신뢰감 있고 명확한 어조를 사용하세요.
+               - 사용자의 현재 상황을 긍정적으로 평가하되, 개선점은 명확히 짚어주세요.
+            """
         
         # 7. 메시지 구성
         messages = [

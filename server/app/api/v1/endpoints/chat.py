@@ -31,18 +31,50 @@ async def chat_stream(request: ChatRequest):
     - type: "done" - 완료 신호
     - type: "error" - 에러 발생
     """
+    print(f"\n[CHAT STREAM] Request received - User: {request.user_id}, Session: {request.session_id}")
+    print(f"[CHAT STREAM] Message: {request.message}")
+    
     async def event_generator():
         try:
+            chunk_count = 0
             async for chunk in chat_service.stream_chat(
                 user_id=request.user_id,
                 session_id=request.session_id,
                 message=request.message,
                 keywords=request.keywords
             ):
+                chunk_count += 1
+                chunk_type = chunk.get("type", "unknown")
+                
+                # 로그 출력 (타입별 상세 정보)
+                if chunk_type == "token":
+                    print(f"Type: token, Content: {chunk.get('content', '')[:50]}...")
+                elif chunk_type == "products":
+                    product_count = len(chunk.get("products", []))
+                    print(f"Type: products, Count: {product_count}")
+                    print(f"Type: products, Products: {chunk.get('products', [])}")
+                elif chunk_type == "keywords":
+                    keywords = chunk.get("keywords", [])
+                    print(f"Type: keywords, Keywords: {keywords}")
+                elif chunk_type == "feature_guide":
+                    print(f"Type: feature_guide, Title: {chunk.get('title', '')}")
+                elif chunk_type == "done":
+                    print(f"Type: done - Stream completed")
+                elif chunk_type == "error":
+                    print(f"Type: error, Message: {chunk.get('content', '')}")
+                else:
+                    print(f"Type: {chunk_type}")
+                
                 # SSE 형식으로 전송
                 yield f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
+            
+            print(f"[CHAT STREAM] Total chunks sent: {chunk_count}")
         
         except Exception as e:
+            print(f"[CHAT STREAM ERROR] {str(e)}")
+            import traceback
+            traceback.print_exc()
+            
             error_data = {
                 "type": "error",
                 "content": f"오류 발생: {str(e)}"
