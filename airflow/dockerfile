@@ -1,5 +1,6 @@
 # 1. 공식 Airflow 이미지를 기반으로 시작
 FROM apache/airflow:3.1.1
+# FROM apache/airflow:2.10.3
 
 # 2. (선택사항) lxml, mysql-connector-python 등이 시스템 라이브러리를 필요로 할 수 있음
 # USER root

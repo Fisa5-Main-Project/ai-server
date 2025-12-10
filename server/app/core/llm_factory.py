@@ -20,7 +20,7 @@ def get_llm(temperature: float = 0.3, streaming: bool = False):
             raise ValueError("GROQ_API_KEY is not set in .env")
             
         return ChatGroq(
-            model_name="llama-3.3-70b-versatile",
+            model_name="qwen/qwen3-32b", # llama-3.3-70b-versatile
             temperature=temperature,
             api_key=settings.GROQ_API_KEY,
             streaming=streaming
@@ -28,7 +28,7 @@ def get_llm(temperature: float = 0.3, streaming: bool = False):
         
     elif provider == "gemini":
         return ChatGoogleGenerativeAI(
-            model="gemini-2.5-flash-lite",
+            model="gemini-2.5-flash",
             google_api_key=settings.GEMINI_API_KEY,
             temperature=temperature,
             streaming=streaming
