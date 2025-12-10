@@ -56,7 +56,48 @@ COMPANY_URLS = {
     "LS": "https://www.ls-sec.co.kr/",
 }
 
+from pymongo import MongoClient
+from app.core.config import settings
+
 class ProductsService:
+    def __init__(self):
+        self.mongo_client = MongoClient(settings.MONGO_DB_URL)
+        self.db = self.mongo_client[settings.MONGO_DB_NAME]
+        self.chat_logs_collection = self.db["chat_logs"]
+
+    def _apply_feedback_reranking(self, user_id: int, products: List[RecommendedProduct]) -> List[RecommendedProduct]:
+        """사용자 피드백 기반 재정렬 (Dislike 제거, Like 상단 노출)"""
+        try:
+            # 사용자의 모든 피드백 조회
+            feedbacks = self.chat_logs_collection.find(
+                {"user_id": user_id, "feedback": {"$in": ["like", "dislike"]}}
+            )
+            
+            liked_products = set()
+            disliked_products = set()
+            
+            for log in feedbacks:
+                pid = log.get("product_id")
+                if not pid: continue
+                
+                if log["feedback"] == "like":
+                    liked_products.add(pid)
+                elif log["feedback"] == "dislike":
+                    disliked_products.add(pid)
+            
+            # 1. Dislike 필터링 (싫어요 한 상품 제거)
+            filtered_products = [p for p in products if p.product_id not in disliked_products]
+            
+            # 2. Like 상단 노출 (좋아요 한 상품 우선 정렬)
+            # liked에 있으면 0 (앞), 없으면 1 (뒤) -> 오름차순 정렬
+            filtered_products.sort(key=lambda p: 0 if p.product_id in liked_products else 1)
+            
+            return filtered_products
+            
+        except Exception as e:
+            print(f"피드백 재정렬 실패: {e}")
+            return products
+
     async def get_recommendations(self, user_id: int, user_message: str = "") -> RecommendationResponse:
         """사용자 임베딩 기반 금융상품 추천"""
         
@@ -86,11 +127,36 @@ class ProductsService:
             last_message = result["messages"][-1]
             response_text = last_message.content
             
-            # 4. JSON 파싱
-            json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
-            if json_match:
-                json_str = json_match.group()
-                data = json.loads(json_str)
+            # 4. JSON 파싱 (개선된 로직)
+            json_str = ""
+            
+            # 4-1. Markdown Code Block 패턴 우선 검색 (```json ... ```)
+            code_block_match = re.search(r'```json\s*(.*?)\s*```', response_text, re.DOTALL)
+            if code_block_match:
+                json_str = code_block_match.group(1)
+            else:
+                # 4-2. 일반 Code Block 패턴 검색 (``` ... ```)
+                code_block_match = re.search(r'```\s*(.*?)\s*```', response_text, re.DOTALL)
+                if code_block_match:
+                    json_str = code_block_match.group(1)
+                else:
+                    # 4-3. 최후의 수단: 가장 바깥쪽 중괄호 찾기
+                    json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
+                    if json_match:
+                        json_str = json_match.group()
+            
+            if json_str:
+                try:
+                    data = json.loads(json_str)
+                except json.JSONDecodeError as e:
+                    print(f"JSON 파싱 에러: {e}\n원본 텍스트: {json_str}")
+                    # 간단한 복구 시도 (예: trailing comma)
+                    try:
+                        import ast
+                        data = ast.literal_eval(json_str)
+                    except:
+                        return RecommendationResponse(products=[])
+
                 
                 products = []
                 if data.get("products"):
@@ -105,6 +171,9 @@ class ProductsService:
                         products.append(RecommendedProduct(**data["annuity"]))
                     if data.get("fund"):
                         products.append(RecommendedProduct(**data["fund"]))
+
+                # 5. 피드백 기반 재정렬 적용
+                products = self._apply_feedback_reranking(user_id, products)
 
                 return RecommendationResponse(products=products)
             else:

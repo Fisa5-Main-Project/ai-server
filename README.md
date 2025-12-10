@@ -120,3 +120,97 @@ python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 -   **API Server**: [http://localhost:8000](http://localhost:8000) 접속 시 서버 상태 확인 가능.
 -   **API Docs**: [http://localhost:8000/docs](http://localhost:8000/docs) 에서 Swagger UI 확인.
 -   **Airflow Webserver**: [http://localhost:8080](http://localhost:8080) 접속 (ID/PW: `airflow`/`airflow` 설정 시).
+
+
+---
+
+## 🛠️ ServerTech Stack Overview (기술 스택)
+
+| Category | Technology | Usage |
+| :--- | :--- | :--- |
+| **Language** | ![Python](https://img.shields.io/badge/Python-3776AB?style=flat-square&logo=python&logoColor=white) | 서버 및 데이터 파이프라인(Airflow) 핵심 로직 구현 |
+| **Database (RDBMS)** | ![MySQL](https://img.shields.io/badge/MySQL-4479A1?style=flat-square&logo=mysql&logoColor=white) | 사용자 정보(회원, 계좌, 자산 등)의 원천 데이터 저장 |
+| **Database (NoSQL)** | ![MongoDB](https://img.shields.io/badge/MongoDB-47A248?style=flat-square&logo=mongodb&logoColor=white) | 벡터 스토어(임베딩 저장), 로그, 비정형 데이터 관리 |
+| **Embedding** | ![Gemini](https://img.shields.io/badge/Gemini_Embedding-8E75B2?style=flat-square&logo=google&logoColor=white) | **Google text-embedding-004**: 텍스트를 고차원 벡터로 변환 |
+| **Framework** | ![LangChain](https://img.shields.io/badge/LangChain-1C3C3C?style=flat-square&logo=chainlink&logoColor=white) | RAG(검색 증강 생성) 파이프라인 및 Agent 구축 |
+| **Vector Search** | ![Atlas](https://img.shields.io/badge/MongoDB_Atlas_Search-47A248?style=flat-square&logo=mongodb&logoColor=white) | **Vector Search Index**: 데이터 중 유사 데이터 초고속 검색 |
+| **ORM** | ![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-D71F00?style=flat-square&logo=sqlalchemy&logoColor=white) | Python 객체와 관계형 데이터베이스(MySQL) 간 매핑 |
+
+---
+
+## 1. 사용자 페르소나 정의 (User Vectorization)
+가장 먼저, RDBMS에 흩어져 있는 사용자 데이터를 조회하여 AI가 이해 가능한 **"텍스트 서사(Persona)"**로 변환합니다.
+
+### 👤 데이터 조회 (MySQL + SQLAlchemy)
+`UserVectorizationService`는 **SQLAlchemy**를 사용하여 MySQL에서 다음 데이터를 직접 쿼리합니다.
+*   **Users 테이블**: 나이, 성별, 투자 성향
+*   **Assets 테이블**: 자산 규모 및 포트폴리오(예적금, 부동산 등) 분포
+*   **UserInfo 테이블**: 연 소득, 은퇴 목표, 희망 생활비
+*   **Keyword 테이블**: 사용자가 선택한 관심 키워드
+
+### 📝 페르소나 생성 & 임베딩
+조회된 데이터를 자연어 텍스트로 합친 후 임베딩합니다.
+*   **Model**: `Google text-embedding-004` (via `langchain-google-genai`)
+*   **Process**: 텍스트 -> 768차원(예시) 벡터 변환
+*   **Storage**: 결과 벡터는 **MongoDB** `user_vectors` 컬렉션에 저장됩니다.
+
+---
+
+## 2. 금융상품 지식화 (Product Vectorization)
+금융상품 데이터 역시 AI가 검색할 수 있도록 벡터화되어 준비됩니다.
+
+### 🔄 데이터 파이프라인 (Airflow ETL)
+매일 새벽, **Airflow** DAG가 금융기관(금감원, 금융위, KVIC) API를 호출합니다.
+1.  **Extract**: JSON 데이터 수집
+2.  **Transform**: 상품 특징, 우대 조건 등을 `rag_text` 필드로 가공
+3.  **Embed**: 동일한 **Gemini Embedding** 모델을 사용하여 벡터 생성
+4.  **Load**: **MongoDB**에 적재 (API 서버와 공유하는 DB)
+
+---
+
+## 3. 매칭 및 추천 (RAG & Vector Search)
+사용자가 질문을 하면, 시스템은 **사용자 벡터**와 **상품 벡터**를 비교하여 가장 적합한 상품을 찾아냅니다.
+
+### 1단계: 검색 (MongoDB Atlas Vector Search)
+*   사용자의 질문 + 페르소나를 결합하여 쿼리 벡터를 생성합니다.
+*   **MongoDB Atlas**의 `vectorSearch` 기능을 사용하여 코사인 유사도(Cosine Similarity)가 높은 상위 상품을 검색합니다.
+    *   *효과: 단순 키워드 매칭이 아닌, "맥락"에 맞는 상품 검색 가능*
+
+### 2단계: 에이전트 분석 (LangGraph)
+검색된 후보 상품들과 사용자 페르소나를 **LangGraph** 기반의 Agent에게 전달합니다.
+*   **Prompt**: "당신은 금융 전문가입니다. [사용자 페르소나]와 [검색된 상품]을 보고 최적의 상품을 추천해주세요."
+*   **Output**: 추천 사유가 담긴 정형화된 JSON 데이터
+
+---
+
+## 4. 피드백 및 최적화 (Feedback Loop)
+추천은 일방적이지 않고 사용자의 반응에 따라 계속 진화합니다.
+
+### 👍👎 재정렬 로직 (Hybrid Filtering)
+사용자가 챗봇에서 남긴 '좋아요/싫어요' 로그는 MongoDB `chat_logs`에 저장됩니다.
+*   **Logic**: `ProductsService`에서 추천 결과를 반환하기 전, MongoDB 로그를 조회하여 **Dislike** 상품은 필터링하고 **Like** 상품은 가중치를 부여해 재정렬합니다.
+
+---
+
+## 🛠️ 요약 다이어그램
+
+```mermaid
+graph TD
+    subgraph "Data Source"
+        MySQL[(MySQL DB)] -->|SQLAlchemy| Service[User Service]
+    end
+
+    subgraph "User Processing"
+        Service -->|Data Aggregation| Persona[페르소나 텍스트]
+        Persona -->|Gemini Embedding| UserVec[사용자 벡터]
+        UserVec -->|Store| Mongo[(MongoDB)]
+    end
+    
+    subgraph "RAG System"
+        Query[사용자 질문] --> Chat[Chat Service]
+        Chat -->|Context| UserVec
+        UserVec -->|Vector Search| Atlas[MongoDB Atlas Search]
+        Atlas -->|Candidates| Candidates[후보 상품군]
+        Candidates -->|LangGraph| Final[최종 추천]
+    end
+```
