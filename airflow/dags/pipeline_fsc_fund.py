@@ -7,7 +7,8 @@ from etl_utils import fetch_fsc_funds, transform_fsc_funds, load_to_mongo, get_m
 @dag(
     dag_id="fsc_fund_standard_code_pipeline",
     start_date=pendulum.datetime(2025, 11, 1, tz="Asia/Seoul"),
-    schedule="20 3 * * *", 
+    #금융위원회 펀드 정보 api 갱신 시간 매 영업일 다음날 오후 한시임
+    schedule="5 13 * * 1-5", 
     catchup=False,
     tags=["fsc", "fund", "etl", "team_4", "preprocessing"],
 )
