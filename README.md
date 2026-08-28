@@ -17,9 +17,9 @@
 
 </div>
 
-## 프로젝트 소개
+## 레포지토리 소개
 
-사용자 자산·은퇴 목표·투자 성향을 바탕으로 금융상품을 추천하는 서버다. MySQL 사용자 정보를 **페르소나 문장**으로 정리하고, MongoDB Atlas **Vector Search**에서 예금·적금·연금저축·펀드 후보를 찾는다. LangGraph가 검색 도구를 선택하며, 추천 결과는 JSON 또는 SSE로 전달한다. 좋아요·싫어요 기록은 다음 추천의 정렬 기준으로 사용한다.
+사용자 자산·은퇴 목표·투자 성향을 바탕으로 금융상품을 추천하는 AI 서버입니다.
 
 ## 서비스 화면
 
@@ -107,7 +107,7 @@ flowchart LR
 | Agent     | LangGraph, LangChain              | 검색 도구 선택과 Agent-Tool 반복 실행   |
 | Embedding | Google `text-embedding-004`       | 사용자·상품 텍스트 벡터화               |
 | Retrieval | MongoDB Atlas Vector Search       | 상품군별 의미 기반 Top-K 검색           |
-| AI API    | FastAPI, Uvicorn                  | 추천·벡터화·SSE 챗봇 API                |
+| AI API    | FastAPI                           | 추천·벡터화·SSE 챗봇 API                |
 | Data      | Apache Airflow, Pandas, PyMongo   | 금융상품 ETL·임베딩·적재·정리           |
 | Storage   | MongoDB Atlas, MySQL              | 벡터/로그 저장, 사용자 원천 데이터 조회 |
 
