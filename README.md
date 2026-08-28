@@ -15,8 +15,6 @@
   <img src="https://img.shields.io/badge/Apache_Airflow-017CEE?style=flat-square&logo=apacheairflow&logoColor=white" alt="Apache Airflow" />
 </p>
 
-[Repository](https://github.com/Fisa5-Main-Project/ai-server)
-
 </div>
 
 ## 프로젝트 소개
