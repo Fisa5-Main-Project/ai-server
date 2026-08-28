@@ -91,6 +91,10 @@ flowchart LR
     F --> I[Vector Index]
 ```
 
+### Airflow DAG 구성
+
+<img src="docs/images/airflow-dag-pipelines.png" alt="금융상품 수집 및 유지보수 Airflow DAG 구성" />
+
 상품군별 DAG가 원천 데이터를 수집하고 검색용 텍스트와 임베딩을 생성한다. 유지보수 DAG는 만기 상품 정리, 컬렉션 통합, 누락 임베딩 보강을 맡는다.
 
 ## System Architecture
