@@ -4,7 +4,8 @@
 
 # 노후하우 AI Server
 
-### 사용자 페르소나와 금융상품 벡터 검색을 결합한 노후 자산관리 RAG 서버
+> **노후 준비, 어떻게(How) 해야 할까?**
+> 고객이 누구인지를 깊이 이해하고(`Know Who`), 그들에게 딱 맞는 노후 솔루션을 제시(`Know How`)하는 시니어 통합 자산 관리 & 라이프 케어 플랫폼 **노후하우(KnowWhoHow)** 의 AI 서버입니다.
 
 <p>
   <img src="https://img.shields.io/badge/Python_3.10-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python 3.10" />
@@ -27,7 +28,13 @@
 
 <img src="docs/images/service-recommendation.png" alt="노후하우 맞춤 금융상품 추천 화면" />
 
-사용자 자산과 목표 키워드를 기준으로 상품 후보와 추천 이유를 함께 제공한다.
+사용자 자산과 목표 키워드를 기준으로 상품 후보와 추천 이유를 함께 제공합니다.
+
+### AI 자산 관리 상담 챗봇
+
+<img src="docs/images/ai-chatbot-features.png" alt="노후하우 AI 자산 관리 상담 챗봇 핵심 기능" />
+
+사용자·세션별 대화 문맥을 유지하며 답변 키워드와 금융상품 추천을 연결합니다. 사용자 피드백은 실시간 Re-ranking에 반영하고, 프롬프트 인젝션 차단을 통해 민감 정보를 보호합니다.
 
 ## AI Pipeline
 
@@ -95,13 +102,28 @@ flowchart LR
 
 <img src="docs/images/airflow-dag-pipelines.png" alt="금융상품 수집 및 유지보수 Airflow DAG 구성" />
 
-상품군별 DAG가 원천 데이터를 수집하고 검색용 텍스트와 임베딩을 생성한다. 유지보수 DAG는 만기 상품 정리, 컬렉션 통합, 누락 임베딩 보강을 맡는다.
+상품군별 DAG가 원천 데이터를 수집하고 검색용 텍스트와 임베딩을 생성. 유지보수 DAG는 만기 상품 정리, 컬렉션 통합, 누락 임베딩 보강을 맡습니다. \
+만기되거나 갱신된 상품이 검색 후보에 남지 않도록 수집 DAG와 유지보수 DAG를 분리했습니다. 만기 상품 정리, 컬렉션 통합, 임베딩 backfill을 자동화해 검색 인덱스의 상태를 일정하게 유지하도록 합니다.
 
 ## System Architecture
 
-<img src="docs/images/system-architecture.png" alt="노후하우 AWS 시스템 아키텍처" />
+### Hybrid Architecture
 
-온프레미스 Airflow가 금융상품 데이터를 수집한다. AWS 내부의 FastAPI 서버는 메인 서버·클라이언트와 통신하며, MySQL에서 사용자 원천 데이터를 읽는다. 상품 벡터·사용자 벡터·대화 및 피드백 로그는 MongoDB Atlas에 저장한다.
+<img src="docs/images/hybrid-architecture.png" alt="노후하우 온프레미스 및 AWS 하이브리드 아키텍처" />
+
+민감 정보 보호와 비용 효율성을 위해 온프레미스와 AWS를 터널링으로 연결한 하이브리드 구조입니다. CI/CD·데이터 수집·MyData는 온프레미스에서, Main·AI·Frontend 서버는 AWS Private Subnet에서 운영합니다.
+
+### AWS Cloud Architecture
+
+<img src="docs/images/aws-cloud-architecture.png" alt="노후하우 AWS 클라우드 아키텍처" />
+
+외부 요청은 Route 53과 WAF를 거쳐 Public Subnet의 Nginx Reverse Proxy로 전달된 후, Private Subnet의 대상 서버로 라우팅됩니다. 내부 서버의 직접 SSH 접근은 차단하며, 허용된 IP의 관리자만 분리된 접속 키와 SSH ProxyJump를 사용해 Bastion Host를 경유합니다.
+
+### On-Premise Architecture
+
+<img src="docs/images/on-premise-architecture.png" alt="노후하우 온프레미스 아키텍처" />
+
+온프레미스에는 CI/CD와 MyData 시스템을 구성했습니다. Jenkins는 관리자 IP만 허용하고 민감 정보는 Credentials로 관리하며, MyData 트래픽은 Nginx와 HAProxy를 거쳐 Master·Slave DB로 분산됩니다. Airflow가 수집한 금융 데이터는 MongoDB Atlas의 벡터 검색에 활용됩니다.
 
 ## 기술 스택
 
@@ -127,29 +149,6 @@ flowchart LR
 
 평가 원본은 [`rag_eval_result_final_20251209.csv`](server/tests/evaluation/rag_eval_result_final_20251209.csv), 테스트 범위는 [`test_results_report.md`](server/tests/test_results_report.md)에 정리돼 있다.
 
-## 기술적 문제와 해결
-
-<details>
-<summary><strong>LLM 응답의 JSON 파싱 안정화</strong></summary>
-
-초기에는 `json.loads()`만 사용해 코드 블록이나 부가 문장이 포함된 응답을 처리하지 못했다. JSON 코드 블록 → 일반 코드 블록 → 최외곽 객체 순서로 본문을 추출하고, 표준 파싱 실패 시 리터럴 파싱을 한 번 더 시도하도록 보완했다.
-
-</details>
-
-<details>
-<summary><strong>사용자 반응을 반영한 추천 재정렬</strong></summary>
-
-벡터 유사도만으로 정렬하면 사용자가 싫어요를 남긴 상품이 다시 노출될 수 있다. 사용자별 피드백 로그를 조회해 `dislike` 상품을 제외하고 `like` 상품을 우선 배치했다. 모델 재학습 없이 다음 추천부터 바로 반영된다.
-
-</details>
-
-<details>
-<summary><strong>금융상품 데이터 신선도 유지</strong></summary>
-
-만기되거나 갱신된 상품이 검색 후보에 남지 않도록 수집 DAG와 유지보수 DAG를 분리했다. 만기 상품 정리, 컬렉션 통합, 임베딩 backfill을 자동화해 검색 인덱스의 상태를 일정하게 유지한다.
-
-</details>
-
 ## Core API
 
 | Method | Endpoint                            | Description                        |
@@ -159,7 +158,17 @@ flowchart LR
 | `POST` | `/api/v1/chat/feedback`             | 상품 좋아요·싫어요 저장            |
 | `GET`  | `/api/v1/chat/history`              | 세션별 대화 내역 조회              |
 | `POST` | `/api/v1/users/{user_id}/vectorize` | 사용자 페르소나 생성 및 벡터 갱신  |
-| `GET`  | `/api/v1/admin/*`                   | 사용량·피드백·대화 로그 통계       |
+
+### Admin API
+
+| Method | Endpoint                       | Description                                     |
+| ------ | ------------------------------ | ----------------------------------------------- |
+| `GET`  | `/api/v1/admin/stats/overview` | 전체 대화·API 호출·만족도·활성 사용자 통계 조회 |
+| `GET`  | `/api/v1/admin/stats/trends`   | 월별 대화 및 API 요청 추이 조회                 |
+| `GET`  | `/api/v1/admin/stats/feedback` | 좋아요·싫어요 피드백 분포 조회                  |
+| `GET`  | `/api/v1/admin/users`          | 사용자별 AI 사용량과 만족도 조회                |
+| `GET`  | `/api/v1/admin/logs`           | 사용자별 최근 챗봇 대화 로그 조회               |
+| `GET`  | `/api/v1/admin/logs/{user_id}` | 특정 사용자의 전체 대화 내역 조회               |
 
 ## 구현 사항
 
