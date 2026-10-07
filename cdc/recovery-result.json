@@ -1,0 +1,11 @@
+{
+  "project": "codex-cdc-recovery",
+  "passed_scenarios": 5,
+  "recovery_timings": {
+    "consumer_restart_replay_seconds": 0.656,
+    "abandoned_lease_recovery_seconds": 3.922,
+    "healthy_event_after_poison_seconds": 0.609,
+    "mysql_connector_recovery_seconds": 0.61
+  },
+  "external_embedding_api_called": false
+}

@@ -40,5 +40,10 @@ class Settings(BaseSettings):
     CDC_GROUP_ID: str = "user-persona-refresh-v1"
     CDC_TOPIC_PREFIX: str = "knowhow"
     CDC_DATABASE: str = "knowhow"
+    CDC_MAX_ATTEMPTS: int = 5
+    CDC_LEASE_SECONDS: int = 120
+    CDC_MONITORING_ENABLED: bool = False
+    CDC_CONNECT_URL: str = "http://connect:8083"
+    CDC_RECONCILE_INTERVAL_SECONDS: int = 900
    
 settings = Settings()

@@ -95,6 +95,8 @@ def test_embedding_failure_keeps_latest_persona_and_retries(pipeline):
     assert pipeline.collection.find_one()["embedding_status"] == "pending"
     assert pipeline.collection.find_one()["persona_text"]
     pipeline.embedder.side_effect = None
+    assert not pipeline.embed_pending(1)  # Backoff must elapse before retry.
+    pipeline.collection.update_one({"_id": "user_1"}, {"$unset": {"embedding_retry_at": ""}})
     assert pipeline.embed_pending(1)
 
 

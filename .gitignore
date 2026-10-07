@@ -3,6 +3,7 @@ venv/
 
 .env
 .env.cdc
+cdc/.env.recovery
 
 __pycache__/
 *.pyc

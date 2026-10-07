@@ -17,13 +17,16 @@ def embed_persona(text):
 
 class UserVectorizationService:
     def __init__(self):
-        self.mongo_client = MongoClient(settings.MONGO_DB_URL)
+        self.mongo_client = MongoClient(settings.MONGO_DB_URL, serverSelectionTimeoutMS=5000,
+                                        connectTimeoutMS=5000, socketTimeoutMS=10000)
         self.db = self.mongo_client[settings.DB_NAME]
         self.user_vectors_collection = self.db["user_vectors"]
-        self.source = MySQLUserSource(create_engine(settings.MYSQL_DB_URL, pool_pre_ping=True),
+        self.source = MySQLUserSource(create_engine(settings.MYSQL_DB_URL, pool_pre_ping=True,
+                                      connect_args={"connect_timeout": 5, "read_timeout": 10, "write_timeout": 10}),
                                       self.user_vectors_collection)
         self.projection = UserProjection(self.source, self.user_vectors_collection,
-                                         embed_persona, settings.USER_EMBEDDING_MODEL)
+                                         embed_persona, settings.USER_EMBEDDING_MODEL,
+                                         settings.CDC_MAX_ATTEMPTS, settings.CDC_LEASE_SECONDS)
 
     def get_user_data_from_db(self, user_id):
         return self.source.read(user_id)

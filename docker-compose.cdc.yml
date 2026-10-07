@@ -1,17 +1,21 @@
 # Isolated local demonstration; does not change an existing source database.
 x-worker: &worker
   build: ./server
-  env_file: .env.cdc
+  image: ${CDC_WORKER_IMAGE:-knowhow-cdc-worker:local}
+  env_file: ${CDC_ENV_FILE:-.env.cdc}
   restart: unless-stopped
+  init: true
+  stop_grace_period: 45s
   depends_on:
     cdc-mysql:
       condition: service_healthy
     cdc-mongo:
-      condition: service_started
+      condition: service_healthy
 
 services:
   cdc-mysql:
     image: mysql:8.4
+    restart: unless-stopped
     command: ["--server-id=184054", "--log-bin=mysql-bin", "--binlog-format=ROW", "--binlog-row-image=FULL", "--binlog-expire-logs-seconds=604800"]
     environment:
       MYSQL_ROOT_PASSWORD: root_demo
@@ -30,11 +34,18 @@ services:
 
   cdc-mongo:
     image: mongo:7.0
+    restart: unless-stopped
     ports: ["127.0.0.1:27018:27017"]
     volumes: ["cdc-mongo-data:/data/db"]
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand({ping:1}).ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
 
   kafka:
     image: apache/kafka:4.1.2
+    restart: unless-stopped
     environment:
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: broker,controller
@@ -58,6 +69,7 @@ services:
 
   connect:
     image: quay.io/debezium/connect:3.3.1.Final
+    restart: unless-stopped
     environment:
       BOOTSTRAP_SERVERS: kafka:9092
       GROUP_ID: user-cdc-connect
@@ -80,7 +92,7 @@ services:
 
   register-connector:
     image: python:3.10-slim
-    env_file: .env.cdc
+    env_file: ${CDC_ENV_FILE:-.env.cdc}
     volumes: ["./cdc/register_connector.py:/register_connector.py:ro"]
     command: ["python", "/register_connector.py"]
     depends_on: [connect]
@@ -89,23 +101,51 @@ services:
   cdc-consumer:
     <<: *worker
     command: ["python", "-m", "app.pipelines.worker", "consume"]
+    healthcheck:
+      test: ["CMD", "python", "-m", "app.pipelines.worker", "health", "--id", "consume"]
+      interval: 20s
+      timeout: 10s
+      start_period: 30s
+      retries: 3
     depends_on:
       register-connector:
         condition: service_completed_successfully
       cdc-mongo:
-        condition: service_started
+        condition: service_healthy
 
   persona-worker:
     <<: *worker
     command: ["python", "-m", "app.pipelines.worker", "refresh"]
+    healthcheck:
+      test: ["CMD", "python", "-m", "app.pipelines.worker", "health", "--id", "refresh"]
+      interval: 20s
+      timeout: 10s
+      start_period: 30s
+      retries: 3
 
   embedding-worker:
     <<: *worker
     command: ["python", "-m", "app.pipelines.worker", "embed"]
+    healthcheck:
+      test: ["CMD", "python", "-m", "app.pipelines.worker", "health", "--id", "embed"]
+      interval: 20s
+      timeout: 10s
+      start_period: 30s
+      retries: 3
 
   ai-server:
     <<: *worker
     ports: ["127.0.0.1:8305:8000"]
+
+  reconciliation-worker:
+    <<: *worker
+    command: ["python", "-m", "app.pipelines.worker", "reconcile-loop"]
+    healthcheck:
+      test: ["CMD", "python", "-m", "app.pipelines.worker", "health", "--id", "reconcile-loop"]
+      interval: 20s
+      timeout: 10s
+      start_period: 30s
+      retries: 3
 
 volumes:
   cdc-mysql-data:

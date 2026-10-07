@@ -1,4 +1,5 @@
 -- Local fixture; never run this file against a production database.
+SET NAMES utf8mb4;
 CREATE USER 'debezium'@'%' IDENTIFIED BY 'cdc_demo';
 GRANT SELECT, RELOAD, SHOW DATABASES, REPLICATION SLAVE, REPLICATION CLIENT, LOCK TABLES ON *.* TO 'debezium'@'%';
 
