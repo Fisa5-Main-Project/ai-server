@@ -20,9 +20,12 @@ class Settings(BaseSettings):
     MONGO_USERNAME: str
     MONGO_PASSWORD: str
     MONGO_HOST: str
+    MONGO_URI: str | None = None
 
     @property
     def MONGO_DB_URL(self):
+        if self.MONGO_URI:
+            return self.MONGO_URI
         return f"mongodb+srv://{self.MONGO_USERNAME}:{self.MONGO_PASSWORD}@{self.MONGO_HOST}"
     
     @property
@@ -32,5 +35,10 @@ class Settings(BaseSettings):
 
     # 3. MySQL (User Profile DB) 설정
     MYSQL_DB_URL: str
+    USER_EMBEDDING_MODEL: str = "models/text-embedding-004"
+    CDC_KAFKA_BOOTSTRAP_SERVERS: str = "kafka:9092"
+    CDC_GROUP_ID: str = "user-persona-refresh-v1"
+    CDC_TOPIC_PREFIX: str = "knowhow"
+    CDC_DATABASE: str = "knowhow"
    
 settings = Settings()

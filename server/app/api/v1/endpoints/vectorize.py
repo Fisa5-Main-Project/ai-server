@@ -13,7 +13,7 @@ async def vectorize_user(user_id: int):
     """
     사용자 벡터화 API
     
-    - Spring Boot에서 사용자 정보 가져오기
+    - MySQL 최신 사용자·자산·상태 조회
     - 페르소나 텍스트 생성
     - Gemini 임베딩 생성
     - MongoDB에 저장

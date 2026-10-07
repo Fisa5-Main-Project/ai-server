@@ -2,7 +2,7 @@ from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from app.core.config import settings
 
 # Gemini Embedding 모델 (API 호출 방식)
-EMBEDDING_MODEL = "models/text-embedding-004"
+EMBEDDING_MODEL = settings.USER_EMBEDDING_MODEL
 print(f"Embedding 모델 {EMBEDDING_MODEL} 로드 중...")
 
 embeddings = GoogleGenerativeAIEmbeddings(

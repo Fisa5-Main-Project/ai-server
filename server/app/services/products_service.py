@@ -3,6 +3,7 @@
 """
 import json
 import re
+import asyncio
 from typing import List
 
 from langchain_core.messages import HumanMessage
@@ -98,21 +99,12 @@ class ProductsService:
             print(f"피드백 재정렬 실패: {e}")
             return products
 
-    async def get_recommendations(self, user_id: int, user_message: str = "") -> RecommendationResponse:
-        """사용자 임베딩 기반 금융상품 추천"""
+    async def get_recommendations(self, user_id: int, user_message: str = "", persona_text: str | None = None) -> RecommendationResponse:
+        """최신 사용자 금융 상태를 문맥으로 사용하는 상품 추천"""
         
         # 1. 사용자 페르소나 가져오기
-        user_vector = user_vectorization_service.user_vectors_collection.find_one(
-            {"_id": f"user_{user_id}"}
-        )
-        
-        if not user_vector:
-            await user_vectorization_service.vectorize_user(user_id)
-            user_vector = user_vectorization_service.user_vectors_collection.find_one(
-                {"_id": f"user_{user_id}"}
-            )
-        
-        persona = user_vector["persona_text"]
+        persona = persona_text if persona_text is not None else await asyncio.to_thread(
+            user_vectorization_service.get_current_persona, user_id)
         
         try:
             # 2. Agent Graph 실행
@@ -207,9 +199,9 @@ class ProductsService:
             link=link
         )
 
-    async def get_chat_products(self, user_id: int, user_message: str = "") -> List[ChatProduct]:
+    async def get_chat_products(self, user_id: int, user_message: str = "", persona_text: str | None = None) -> List[ChatProduct]:
         """챗봇용 상품 추천 목록 반환"""
-        rec_response = await self.get_recommendations(user_id, user_message)
+        rec_response = await self.get_recommendations(user_id, user_message, persona_text=persona_text)
         products = []
         
         if rec_response.products:

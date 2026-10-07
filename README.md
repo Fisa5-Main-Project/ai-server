@@ -84,6 +84,10 @@ User Query + Persona Text
 
 ## Data Pipeline
 
+사용자 자산·투자 성향·은퇴 상태 변경은 CDC로 감지해 추천용 페르소나를 자동 갱신합니다.
+추천·챗봇 요청은 최신 MySQL 상태를 확인하며, 임베딩은 비동기로 처리합니다.
+설계·트레이드오프·로컬 실행·검증 방법은 [사용자 상태 CDC](docs/user-state-cdc.md)에 정리했습니다.
+
 <img src="docs/images/product-data-format.png" alt="금융상품 원천 데이터와 MongoDB 저장 포맷" />
 
 ```mermaid
