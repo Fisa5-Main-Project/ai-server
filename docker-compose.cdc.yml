@@ -1,0 +1,153 @@
+# Isolated local demonstration; does not change an existing source database.
+x-worker: &worker
+  build: ./server
+  image: ${CDC_WORKER_IMAGE:-knowhow-cdc-worker:local}
+  env_file: ${CDC_ENV_FILE:-.env.cdc}
+  restart: unless-stopped
+  init: true
+  stop_grace_period: 45s
+  depends_on:
+    cdc-mysql:
+      condition: service_healthy
+    cdc-mongo:
+      condition: service_healthy
+
+services:
+  cdc-mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+    command: ["--server-id=184054", "--log-bin=mysql-bin", "--binlog-format=ROW", "--binlog-row-image=FULL", "--binlog-expire-logs-seconds=604800"]
+    environment:
+      MYSQL_ROOT_PASSWORD: root_demo
+      MYSQL_DATABASE: knowhow
+      MYSQL_USER: app
+      MYSQL_PASSWORD: app_demo
+    ports: ["127.0.0.1:3307:3306"]
+    volumes:
+      - cdc-mysql-data:/var/lib/mysql
+      - ./cdc/mysql-init.sql:/docker-entrypoint-initdb.d/001-init.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-proot_demo"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  cdc-mongo:
+    image: mongo:7.0
+    restart: unless-stopped
+    ports: ["127.0.0.1:27018:27017"]
+    volumes: ["cdc-mongo-data:/data/db"]
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand({ping:1}).ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  kafka:
+    image: apache/kafka:4.1.2
+    restart: unless-stopped
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+    volumes: ["cdc-kafka-data:/var/lib/kafka/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --list >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+
+  connect:
+    image: quay.io/debezium/connect:3.3.1.Final
+    restart: unless-stopped
+    environment:
+      BOOTSTRAP_SERVERS: kafka:9092
+      GROUP_ID: user-cdc-connect
+      CONFIG_STORAGE_TOPIC: user-cdc-config
+      OFFSET_STORAGE_TOPIC: user-cdc-offsets
+      STATUS_STORAGE_TOPIC: user-cdc-status
+      CONFIG_STORAGE_REPLICATION_FACTOR: 1
+      OFFSET_STORAGE_REPLICATION_FACTOR: 1
+      STATUS_STORAGE_REPLICATION_FACTOR: 1
+      KEY_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      VALUE_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      KEY_CONVERTER_SCHEMAS_ENABLE: "false"
+      VALUE_CONVERTER_SCHEMAS_ENABLE: "false"
+    ports: ["127.0.0.1:8083:8083"]
+    depends_on:
+      kafka:
+        condition: service_healthy
+      cdc-mysql:
+        condition: service_healthy
+
+  register-connector:
+    image: python:3.10-slim
+    env_file: ${CDC_ENV_FILE:-.env.cdc}
+    volumes: ["./cdc/register_connector.py:/register_connector.py:ro"]
+    command: ["python", "/register_connector.py"]
+    depends_on: [connect]
+    restart: on-failure
+
+  cdc-consumer:
+    <<: *worker
+    command: ["python", "-m", "app.pipelines.worker", "consume"]
+    healthcheck:
+      test: ["CMD", "python", "-m", "app.pipelines.worker", "health", "--id", "consume"]
+      interval: 20s
+      timeout: 10s
+      start_period: 30s
+      retries: 3
+    depends_on:
+      register-connector:
+        condition: service_completed_successfully
+      cdc-mongo:
+        condition: service_healthy
+
+  persona-worker:
+    <<: *worker
+    command: ["python", "-m", "app.pipelines.worker", "refresh"]
+    healthcheck:
+      test: ["CMD", "python", "-m", "app.pipelines.worker", "health", "--id", "refresh"]
+      interval: 20s
+      timeout: 10s
+      start_period: 30s
+      retries: 3
+
+  embedding-worker:
+    <<: *worker
+    command: ["python", "-m", "app.pipelines.worker", "embed"]
+    healthcheck:
+      test: ["CMD", "python", "-m", "app.pipelines.worker", "health", "--id", "embed"]
+      interval: 20s
+      timeout: 10s
+      start_period: 30s
+      retries: 3
+
+  ai-server:
+    <<: *worker
+    ports: ["127.0.0.1:8305:8000"]
+
+  reconciliation-worker:
+    <<: *worker
+    command: ["python", "-m", "app.pipelines.worker", "reconcile-loop"]
+    healthcheck:
+      test: ["CMD", "python", "-m", "app.pipelines.worker", "health", "--id", "reconcile-loop"]
+      interval: 20s
+      timeout: 10s
+      start_period: 30s
+      retries: 3
+
+volumes:
+  cdc-mysql-data:
+  cdc-mongo-data:
+  cdc-kafka-data:

@@ -1,6 +1,11 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.v1.api import api_router
+from fastapi.responses import JSONResponse
+from sqlalchemy import text
+from app.core.config import settings
+from app.pipelines.monitoring import pipeline_status
+from app.services.user_vectorization_service import user_vectorization_service
 
 app = FastAPI(
     title="노후하우 AI 추천 서버",
@@ -54,3 +59,28 @@ def root():
 @app.get("/health")
 def health_check():
     return {"status": "ok", "message": "AI Server is running"}
+
+
+@app.get("/health/ready")
+def readiness():
+    """Readiness is separate from process liveness; never return financial payloads."""
+    result = {"ready": True, "checks": {}}
+    service = user_vectorization_service
+    try:
+        with service.source.engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        result["checks"]["mysql"] = "healthy"
+    except Exception:
+        result["checks"]["mysql"] = "unavailable"
+        result["ready"] = False
+    try:
+        service.db.command("ping")
+        result["checks"]["mongo"] = "healthy"
+        if settings.CDC_MONITORING_ENABLED:
+            result["pipeline"] = pipeline_status(service.db, settings.CDC_CONNECT_URL)
+            # Read-through serving still works during CDC/embedding outages.
+            result["pipeline_ready"] = result["pipeline"]["ready"]
+    except Exception:
+        result["checks"]["mongo"] = "unavailable"
+        result["ready"] = False
+    return JSONResponse(result, status_code=200 if result["ready"] else 503)

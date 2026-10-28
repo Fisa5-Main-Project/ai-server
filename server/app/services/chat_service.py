@@ -8,6 +8,7 @@ from pymongo import MongoClient
 import operator
 import json
 import re
+import asyncio
 from sqlalchemy import create_engine, text
 
 from langchain_core.messages import HumanMessage, AIMessage, BaseMessage, SystemMessage
@@ -43,13 +44,11 @@ class ChatService:
         
     def get_user_context(self, user_id: int, keywords: Optional[List[int]] = None) -> str:
         """사용자 컨텍스트 생성 (페르소나 + 추가 키워드)"""
-        # 사용자 벡터 가져오기
-        user_vector = user_vectorization_service.user_vectors_collection.find_one(
-            {"_id": f"user_{user_id}"}
-        )
+        # 임베딩 완료를 기다리지 않고 최신 원천 상태로 페르소나 생성
+        persona = user_vectorization_service.get_current_persona(user_id)
         
-        if user_vector:
-            context = user_vector["persona_text"]
+        if persona:
+            context = persona
             
             # 추가 키워드가 있다면 포함
             if keywords:
@@ -272,7 +271,7 @@ class ChatService:
             return
         
         # 2. 사용자 컨텍스트 로딩
-        user_context = self.get_user_context(user_id, keywords)
+        user_context = await asyncio.to_thread(self.get_user_context, user_id, keywords)
         
         # 3. 대화 히스토리 가져오기 (컨텍스트 윈도우 관리를 위해 최근 3개만)
         history = self.get_chat_history(user_id, session_id, limit=3)
@@ -286,7 +285,7 @@ class ChatService:
         if is_recommendation:
             try:
                 # RAG 서비스를 통해 추천 상품 가져오기
-                products = await products_service.get_chat_products(user_id, message)
+                products = await products_service.get_chat_products(user_id, message, persona_text=user_context)
             except Exception as e:
                 print(f"RAG 추천 실패: {e}")
                 # 실패해도 대화는 계속 진행
