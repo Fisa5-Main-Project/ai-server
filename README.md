@@ -34,53 +34,29 @@
 
 <img src="docs/images/ai-chatbot-features.png" alt="노후하우 AI 자산 관리 상담 챗봇 핵심 기능" />
 
-사용자·세션별 대화 문맥을 유지하며 답변 키워드와 금융상품 추천을 연결합니다. 사용자 피드백은 실시간 Re-ranking에 반영하고, 프롬프트 인젝션 차단을 통해 민감 정보를 보호합니다.
+사용자·세션별 대화 이력을 저장하며 답변 키워드와 금융상품 추천을 연결합니다. 비선호 이력은 답변 생성 전 검증에 반영하며, 추천 결과는 검증된 상품 정보만으로 구성합니다.
 
 ## AI Pipeline
 
-```mermaid
-flowchart LR
-    A[User Query] --> B[Persona Context]
-    B --> C[LangGraph Agent]
-    C --> D{Search Tool Selection}
-    D --> E1[Deposit]
-    D --> E2[Saving]
-    D --> E3[Annuity]
-    D --> E4[Fund]
-    E1 & E2 & E3 & E4 --> F[MongoDB Atlas<br/>Vector Search · Top 3]
-    F --> C
-    C --> G[Structured JSON]
-    G --> H[Feedback Re-ranking]
-    H --> I[REST / SSE Response]
-    J[(Like / Dislike Logs)] --> H
-```
-
-| 단계       | 처리                                                                              |
-| ---------- | --------------------------------------------------------------------------------- |
-| Persona    | 연령, 투자 성향, 자산, 소득, 은퇴 목표, 관심 키워드를 하나의 사용자 문맥으로 구성 |
-| Retrieval  | 에이전트가 상품군별 검색 도구를 호출하고 벡터 유사도 상위 3개 후보를 조회         |
-| Generation | 검색 결과와 페르소나를 바탕으로 추천 상품·혜택·이유를 JSON으로 생성               |
-| Re-ranking | 싫어요 상품은 제외하고 좋아요 상품은 상단에 배치                                  |
-| Delivery   | 추천 API 또는 챗봇 SSE 스트림으로 상품·답변·후속 질문을 전달                      |
-
-## Retrieval & Personalization
+2026-11-02부터 상품 적합성은 LLM과 분리한 코드 정책으로 검증합니다.
+구현 정책, 데이터 준비, 한계 및 평가 방법은 [안전한 추천](docs/safe-recommendations.md)을 참고하세요. 위험등급이 없는 원천 상품은 [상품별 공식 근거와 내부 위험분류](docs/product-evidence.md)로 보강합니다.
 
 ```text
-MySQL User Data
-  → Persona Text + Embedding
-  → MongoDB user_vectors
-
-User Query + Persona Text
-  → LangGraph Tool Calling
-  → Product Vector Search (k=3)
-  → LLM Structured Output
-  → Feedback Re-ranking
+최신 MySQL 고객 프로필 + 사용자 요청
+  → LLM 요청 해석 (상품군·금융사)
+  → 상품군별 후보 검색 (최대 20개)
+  → 위험등급·자금·요청 조건·가입 조건·비선호 검증
+  → 검증 통과 상품의 정형 응답 (최대 3개)
+  → 판단 근거와 제외 사유 감사 기록
+  → REST / SSE 응답
 ```
 
-- **페르소나 문맥**: 사용자 정보를 페르소나 텍스트와 임베딩으로 저장한다. 온라인 추천에는 페르소나 텍스트를 에이전트 문맥으로 사용한다.
-- **동일 임베딩 공간**: 검색 질의와 금융상품 `rag_text`를 `text-embedding-004`로 벡터화해 유사도를 계산한다.
-- **카테고리별 검색**: 예금·적금·연금저축·펀드 컬렉션을 분리한다. 예금/적금은 `product_type` 메타데이터로 한 번 더 필터링한다.
-- **Agentic Retrieval**: LangGraph가 질문과 페르소나에 맞는 검색 도구를 고르고, 도구 결과를 다음 추론 문맥에 넣는다.
+- 위험 1~3등급 및 고객 성향보다 위험한 상품을 제외합니다.
+- 요청 상품군·금융사·금액·기간과 맞지 않거나 비선호한 상품을 제외합니다.
+- 위험 및 가입 조건의 확인 근거가 없는 상품은 추천하지 않습니다. 기존 데이터에 검증 메타데이터를 보강해야 합니다.
+- 적합한 후보가 없으면 추천을 보류하며 다른 금융사/상품군으로 임의 대체하지 않습니다.
+- 추천 챗봇은 검증된 상품만 정형 설명하고, 일반 개념은 검토된 설명문으로 안내합니다.
+- 기존 평가 결과는 아래에 역사적 기록으로 유지합니다. 부적합 추천률 18% → 2%는 측정·입증되지 않았습니다.
 
 ## Data Pipeline
 

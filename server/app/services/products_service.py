@@ -1,12 +1,15 @@
 """
 상품 추천 서비스 로직 (Refactored)
 """
-import json
-import re
+import logging
+from datetime import datetime, timezone
+from uuid import uuid4
 import asyncio
 from typing import List
 
-from langchain_core.messages import HumanMessage
+from app.rag.suitability import POLICY_VERSION, build_profile
+
+logger = logging.getLogger(__name__)
 
 from app.rag.graphs.product_graph import build_product_graph
 from app.services.user_vectorization_service import user_vectorization_service
@@ -62,121 +65,57 @@ from app.core.config import settings
 
 class ProductsService:
     def __init__(self):
-        self.mongo_client = MongoClient(settings.MONGO_DB_URL)
+        self.mongo_client = MongoClient(settings.MONGO_DB_URL, serverSelectionTimeoutMS=5000, connectTimeoutMS=5000, socketTimeoutMS=10000)
         self.db = self.mongo_client[settings.MONGO_DB_NAME]
         self.chat_logs_collection = self.db["chat_logs"]
+        self.audit_collection = self.db["recommendation_audits"]
 
-    def _apply_feedback_reranking(self, user_id: int, products: List[RecommendedProduct]) -> List[RecommendedProduct]:
-        """사용자 피드백 기반 재정렬 (Dislike 제거, Like 상단 노출)"""
-        try:
-            # 사용자의 모든 피드백 조회
-            feedbacks = self.chat_logs_collection.find(
-                {"user_id": user_id, "feedback": {"$in": ["like", "dislike"]}}
-            )
-            
-            liked_products = set()
-            disliked_products = set()
-            
-            for log in feedbacks:
-                pid = log.get("product_id")
-                if not pid: continue
-                
-                if log["feedback"] == "like":
-                    liked_products.add(pid)
-                elif log["feedback"] == "dislike":
-                    disliked_products.add(pid)
-            
-            # 1. Dislike 필터링 (싫어요 한 상품 제거)
-            filtered_products = [p for p in products if p.product_id not in disliked_products]
-            
-            # 2. Like 상단 노출 (좋아요 한 상품 우선 정렬)
-            # liked에 있으면 0 (앞), 없으면 1 (뒤) -> 오름차순 정렬
-            filtered_products.sort(key=lambda p: 0 if p.product_id in liked_products else 1)
-            
-            return filtered_products
-            
-        except Exception as e:
-            print(f"피드백 재정렬 실패: {e}")
-            return products
+    def _feedback(self, user_id):
+        liked, disliked = set(), set()
+        for log in self.chat_logs_collection.find(
+            {"user_id": user_id, "feedback": {"$in": ["like", "dislike"]}},
+            {"product_id": 1, "feedback": 1},
+        ):
+            pid = log.get("product_id")
+            if pid:
+                (disliked if log["feedback"] == "dislike" else liked).add(str(pid))
+        return sorted(liked - disliked), sorted(disliked)
 
     async def get_recommendations(self, user_id: int, user_message: str = "", persona_text: str | None = None) -> RecommendationResponse:
-        """최신 사용자 금융 상태를 문맥으로 사용하는 상품 추천"""
-        
-        # 1. 사용자 페르소나 가져오기
-        persona = persona_text if persona_text is not None else await asyncio.to_thread(
-            user_vectorization_service.get_current_persona, user_id)
-        
+        """Read a fresh structured source profile; prose cannot change eligibility."""
+        request_id = str(uuid4())
+        record = {"request_id": request_id, "user_id": user_id,
+                  "timestamp": datetime.now(timezone.utc), "policy_version": POLICY_VERSION}
         try:
-            # 2. Agent Graph 실행
-            content = f"{persona}\n\n사용자 요청: {user_message}" if user_message else persona
-            
+            snapshot = await asyncio.to_thread(user_vectorization_service.get_user_data_from_db, user_id)
+            profile = build_profile(snapshot)
+            liked, disliked = await asyncio.to_thread(self._feedback, user_id)
             result = await product_graph.ainvoke({
-                "messages": [HumanMessage(content=content)],
-                "persona": persona
+                "query": user_message, "profile": profile, "liked": liked, "disliked": disliked,
             })
-            
-            # 3. 마지막 메시지에서 JSON 추출
-            last_message = result["messages"][-1]
-            response_text = last_message.content
-            
-            # 4. JSON 파싱 (개선된 로직)
-            json_str = ""
-            
-            # 4-1. Markdown Code Block 패턴 우선 검색 (```json ... ```)
-            code_block_match = re.search(r'```json\s*(.*?)\s*```', response_text, re.DOTALL)
-            if code_block_match:
-                json_str = code_block_match.group(1)
-            else:
-                # 4-2. 일반 Code Block 패턴 검색 (``` ... ```)
-                code_block_match = re.search(r'```\s*(.*?)\s*```', response_text, re.DOTALL)
-                if code_block_match:
-                    json_str = code_block_match.group(1)
-                else:
-                    # 4-3. 최후의 수단: 가장 바깥쪽 중괄호 찾기
-                    json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
-                    if json_match:
-                        json_str = json_match.group()
-            
-            if json_str:
-                try:
-                    data = json.loads(json_str)
-                except json.JSONDecodeError as e:
-                    print(f"JSON 파싱 에러: {e}\n원본 텍스트: {json_str}")
-                    # 간단한 복구 시도 (예: trailing comma)
-                    try:
-                        import ast
-                        data = ast.literal_eval(json_str)
-                    except:
-                        return RecommendationResponse(products=[])
-
-                
-                products = []
-                if data.get("products"):
-                    for p in data["products"]:
-                        products.append(RecommendedProduct(**p))
-                
-                # Legacy format fallback
-                if not products:
-                    if data.get("deposit_or_saving"):
-                        products.append(RecommendedProduct(**data["deposit_or_saving"]))
-                    if data.get("annuity"):
-                        products.append(RecommendedProduct(**data["annuity"]))
-                    if data.get("fund"):
-                        products.append(RecommendedProduct(**data["fund"]))
-
-                # 5. 피드백 기반 재정렬 적용
-                products = self._apply_feedback_reranking(user_id, products)
-
-                return RecommendationResponse(products=products)
-            else:
-                print(f"JSON 형식을 찾을 수 없습니다: {response_text}")
-                return RecommendationResponse(products=[])
-        
-        except Exception as e:
-            print(f"Agent 실행 실패: {e}")
-            import traceback
-            traceback.print_exc()
-            return RecommendationResponse(products=[])
+            products = [RecommendedProduct(**p) for p in result["products"]]
+            record.update({"status": "completed", "profile": {
+                "tendency": profile["tendency"],
+                "available_funds": str(profile["available_funds"]) if profile["available_funds"] is not None else None,
+            }, "intent": result["intent"], "decisions": result["decisions"],
+                "products": [p.model_dump() for p in products]})
+            # Do not release recommendations if the validation audit cannot be persisted.
+            await asyncio.to_thread(self.audit_collection.insert_one, record)
+            return RecommendationResponse(products=products, request_id=request_id,
+                status="ok" if products else "no_suitable_products",
+                message=None if products else "요청 조건과 투자 성향에 맞고 가입 조건이 확인된 상품이 없습니다.")
+        except Exception as exc:
+            logger.warning("Recommendation withheld request_id=%s error_type=%s", request_id, type(exc).__name__)
+            try:
+                await asyncio.to_thread(self.audit_collection.insert_one, {
+                    "request_id": request_id, "user_id": user_id,
+                    "timestamp": datetime.now(timezone.utc), "policy_version": POLICY_VERSION,
+                    "status": "withheld", "error_type": type(exc).__name__,
+                })
+            except Exception:
+                logger.error("Recommendation audit unavailable request_id=%s", request_id)
+            return RecommendationResponse(products=[], request_id=request_id, status="unavailable",
+                message="고객 정보 또는 상품 검증 정보를 확인할 수 없어 추천을 보류했습니다.")
 
     def _convert_to_chat_product(self, product: RecommendedProduct, icon: str) -> ChatProduct:
         """RecommendedProduct를 ChatProduct로 변환"""

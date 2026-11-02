@@ -13,9 +13,9 @@ async def get_recommendations(user_id: int):
     """
     사용자 ID 기반 맞춤형 금융상품 추천
     
-    - 사용자 임베딩을 MongoDB에서 가져옴
-    - Vector Search로 유사한 금융상품 검색
-    - 예적금, 연금저축, 펀드 각 1개씩 추천
+    - 최신 구조화 고객 프로필로 위험 및 자금 조건 검증
+    - 검색된 후보 중 적합성이 확인된 상품만 최대 3개 반환
+    - 검증 불가 시 추천 보류, request_id로 판단 이력 추적
     
     **Parameters:**
     - user_id: 사용자 ID

@@ -11,6 +11,8 @@ class RecommendationRequest(BaseModel):
 # (이미지의 포트폴리오 카드 형식)
 
 class RecommendedProduct(BaseModel):
+    risk_basis: Optional[str] = None
+    evidence_url: Optional[str] = None
     product_id: Optional[str] = None  # MongoDB document ID (피드백 추적용)
     product_type: Optional[str] = None        # "예금", "적금", "연금저축", "펀드"
     product_name: Optional[str] = None         # 상품명 (e.g., "우리SUPER주거래적금")
@@ -25,6 +27,9 @@ class RecommendedProduct(BaseModel):
     max_amount: Optional[int] = None       # 최대 가입 금액
 
 class RecommendationResponse(BaseModel):
+    request_id: Optional[str] = None
+    status: str = "ok"
+    message: Optional[str] = None
     # 3가지 금융상품을 각각 하나씩 추천 (Legacy support)
     deposit_or_saving: Optional[RecommendedProduct] = None
     annuity: Optional[RecommendedProduct] = None

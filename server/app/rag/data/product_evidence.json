@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "products": [
+    {
+      "evidence_id": "woori-won-plus-20261102",
+      "match": {"product_type": "deposit", "company_names": ["우리은행"], "product_names": ["WON플러스 예금"]},
+      "checked_on": "2026-11-02",
+      "sources": [{"id": "issuer", "publisher": "우리은행", "document_date": null, "url": "https://spot.wooribank.com/pot/Dream?PRD_CD=P010002491&PRD_YN=Y&cc=c011231%3Ac009166%3Bc012263%3Ac012399&withyou=PORMG0009"}],
+      "facts": {
+        "instrument": {"value": "ordinary_krw_deposit", "source_id": "issuer", "locator": "WON플러스 예금 / 상품종류", "interpretation": "공식 예금 상품의 구조를 내부 분류 체계에 매핑; 공식 투자위험등급 아님"},
+        "deposit_protected": {"value": true, "source_id": "issuer", "locator": "예금자보호 표시"},
+        "retail_available": {"value": true, "source_id": "issuer", "locator": "가입대상"},
+        "eligibility_unrestricted": {"value": true, "source_id": "issuer", "locator": "가입대상: 개인 실명 가입; 별도 연령·직업 제한 미기재"},
+        "min_amount": {"value": 10000, "source_id": "issuer", "locator": "가입금액"},
+        "min_term_months": {"value": 1, "source_id": "issuer", "locator": "가입기간"},
+        "max_term_months": {"value": 36, "source_id": "issuer", "locator": "가입기간"},
+        "sales_status": {"value": "listed", "source_id": "issuer", "locator": "현재 상품 안내와 가입 경로 제공"}
+      }
+    },
+    {
+      "evidence_id": "kb-star-deposit-20261102",
+      "match": {"product_type": "deposit", "company_names": ["국민은행", "KB국민은행"], "product_names": ["KB Star 정기예금"]},
+      "checked_on": "2026-11-02",
+      "sources": [{"id": "issuer", "publisher": "KB국민은행", "document_date": null, "url": "https://obank.kbstar.com/quics?cc=b061496%3Ab061645&isNew=N&page=C016613&prcode=DP01000938"}],
+      "facts": {
+        "instrument": {"value": "ordinary_krw_deposit", "source_id": "issuer", "locator": "상품특징: 온라인 정기예금", "interpretation": "예금 구조를 내부 분류 체계에 매핑; 공식 투자위험등급 아님"},
+        "deposit_protected": {"value": true, "source_id": "issuer", "locator": "예금자보호여부"},
+        "retail_available": {"value": true, "source_id": "issuer", "locator": "가입대상: 개인·개인사업자"},
+        "eligibility_unrestricted": {"value": true, "source_id": "issuer", "locator": "가입대상: 별도 연령·직업 제한 미기재"},
+        "min_amount": {"value": 1000000, "source_id": "issuer", "locator": "가입금액"},
+        "min_term_months": {"value": 1, "source_id": "issuer", "locator": "계약기간"},
+        "max_term_months": {"value": 36, "source_id": "issuer", "locator": "계약기간"},
+        "sales_status": {"value": "listed", "source_id": "issuer", "locator": "상품가입 화면"}
+      }
+    },
+    {
+      "evidence_id": "kakao-deposit-20261102",
+      "match": {"product_type": "deposit", "company_names": ["카카오뱅크", "주식회사 카카오뱅크"], "product_names": ["카카오뱅크 정기예금"]},
+      "checked_on": "2026-11-02",
+      "sources": [
+        {"id": "terms", "publisher": "카카오뱅크", "document_date": "2025-11-12", "url": "https://og.kakaobank.io/download/5146ec47-4968-40c4-af9f-d963e4c09289"},
+        {"id": "current", "publisher": "카카오뱅크", "document_date": null, "url": "https://www.kakaobank.com/products/deposit"}
+      ],
+      "facts": {
+        "instrument": {"value": "ordinary_krw_deposit", "source_id": "terms", "locator": "2쪽 상품개요", "interpretation": "정기예금 구조를 내부 분류에 매핑; 공식 투자위험등급 아님"},
+        "deposit_protected": {"value": true, "source_id": "terms", "locator": "1쪽 예금자보호"},
+        "retail_available": {"value": true, "source_id": "terms", "locator": "1쪽 가입대상"},
+        "eligibility_unrestricted": {"value": false, "source_id": "terms", "locator": "가입대상에 연령 조건 존재; 고객별 검증 전 추천 보류"},
+        "min_age": {"value": 14, "source_id": "terms", "locator": "1쪽 가입대상"},
+        "min_amount": {"value": 1000000, "source_id": "terms", "locator": "1쪽 최소 가입금액"},
+        "min_term_months": {"value": 1, "source_id": "terms", "locator": "1쪽 가입기간"},
+        "max_term_months": {"value": 36, "source_id": "terms", "locator": "1쪽 가입기간"},
+        "sales_status": {"value": "listed", "source_id": "current", "locator": "정기예금 현재 상품안내"}
+      }
+    }
+  ]
+}
