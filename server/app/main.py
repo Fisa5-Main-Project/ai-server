@@ -6,6 +6,8 @@ from sqlalchemy import text
 from app.core.config import settings
 from app.pipelines.monitoring import pipeline_status
 from app.services.user_vectorization_service import user_vectorization_service
+from app.gateway.runtime import gateway_lifespan
+from app.gateway.errors import GatewayError
 
 app = FastAPI(
     title="노후하우 AI 추천 서버",
@@ -13,7 +15,8 @@ app = FastAPI(
     version="2.0.0",
     root_path="/ai",
     docs_url="/docs",
-    redoc_url="/redoc"
+    redoc_url="/redoc",
+    lifespan=gateway_lifespan,
 )
 
 # CORS 설정 (Next.js 직접 연결)
@@ -38,6 +41,24 @@ app.add_middleware(
 
 # API v1 라우터 포함
 app.include_router(api_router, prefix="/api")
+
+
+@app.exception_handler(GatewayError)
+async def gateway_error_handler(request, exc):
+    headers = {'Retry-After':str(exc.retry_after)} if exc.retry_after else {}
+    if exc.status == 401:
+        headers['WWW-Authenticate'] = 'Bearer'
+    return JSONResponse({'error':exc.payload()},status_code=exc.status,headers=headers)
+
+
+@app.get('/health/llm')
+async def llm_readiness():
+    try:
+        await app.state.llm_redis.ping()
+        await app.state.auth_redis.ping()
+        return {'ready':True}
+    except Exception:
+        return JSONResponse({'ready':False},status_code=503)
 
 
 @app.get("/")

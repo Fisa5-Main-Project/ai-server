@@ -56,6 +56,29 @@ def test_persona_refresh_does_not_wait_for_embedding(pipeline):
     assert pipeline.collection.find_one()["embedding_status"] == "pending"
 
 
+def test_recommendation_context_reuses_vector_and_refreshes_after_asset_change(pipeline, data):
+    snapshot, vector = pipeline.recommendation_context(1)
+    assert snapshot['assets'][0]['balance'] == '100000.01'
+    assert vector == [0.1, 0.2]
+    pipeline.recommendation_context(1)
+    assert pipeline.embedder.call_count == 1
+    data['assets'][0]['balance'] = '50000.00'
+    pipeline.embedder.return_value = [0.3, 0.4]
+    snapshot, vector = pipeline.recommendation_context(1)
+    assert snapshot['assets'][0]['balance'] == '50000.00'
+    assert vector == [0.3, 0.4]
+    assert pipeline.embedder.call_count == 2
+
+
+def test_recommendation_context_rejects_concurrent_profile_change(pipeline):
+    def changed_during_embedding(text):
+        pipeline.collection.update_one({}, {'$set': {'persona_hash': 'newer'}})
+        return [0.1, 0.2]
+    pipeline.embedder.side_effect = changed_during_embedding
+    with pytest.raises(RuntimeError):
+        pipeline.recommendation_context(1)
+
+
 def test_duplicate_refresh_skips_embedding_and_preserves_created_at(pipeline):
     pipeline.refresh(1)
     pipeline.embed_pending(1)

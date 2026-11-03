@@ -1,8 +1,16 @@
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Depends, Request
+from app.gateway.auth import administrator
 from typing import List, Dict, Any
 from app.services.admin_service import admin_service
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(administrator)])
+
+
+@router.get('/stats/llm-usage')
+async def get_llm_usage(request: Request, days: int = Query(7, ge=1, le=90),
+                        user_id: int | None = Query(None, ge=1)):
+    """Actual provider attempts/tokens, distinct from legacy conversation statistics."""
+    return await request.app.state.llm_usage.summary(days, user_id)
 
 @router.get("/stats/overview")
 async def get_dashboard_stats() -> Dict[str, Any]:

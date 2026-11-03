@@ -1,7 +1,10 @@
 """
 금융상품 추천 API 엔드포인트
 """
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
+from app.gateway.auth import Principal, authenticated_user, authorize_owner
+from app.gateway.errors import GatewayError
+from app.gateway.service import usage_context
 from app.schemas.recommendation import RecommendationResponse
 from app.services.products_service import products_service
 
@@ -9,13 +12,13 @@ router = APIRouter(tags=["Recommendations"])
 
 
 @router.get("/recommendations/{user_id}", response_model=RecommendationResponse)
-async def get_recommendations(user_id: int):
+async def get_recommendations(user_id: int, principal: Principal = Depends(authenticated_user)):
     """
     사용자 ID 기반 맞춤형 금융상품 추천
     
-    - 사용자 임베딩을 MongoDB에서 가져옴
-    - Vector Search로 유사한 금융상품 검색
-    - 예적금, 연금저축, 펀드 각 1개씩 추천
+    - 최신 구조화 고객 프로필로 위험 및 자금 조건 검증
+    - 검색된 후보 중 적합성이 확인된 상품만 최대 3개 반환
+    - 검증 불가 시 추천 보류, request_id로 판단 이력 추적
     
     **Parameters:**
     - user_id: 사용자 ID
@@ -33,9 +36,12 @@ async def get_recommendations(user_id: int):
     - benefit: 핵심 혜택 요약
     - reason: AI 생성 추천 이유
     """
+    authorize_owner(principal, user_id)
     try:
-        recommendations = await products_service.get_recommendations(user_id)
-        print("recommendations", recommendations)
+        with usage_context(principal.user_id, 'recommendations'):
+            recommendations = await products_service.get_recommendations(principal.user_id)
         return recommendations
+    except GatewayError:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"추천 실패: 문제가 발생하였습니다.")
