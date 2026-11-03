@@ -16,18 +16,18 @@ def test_real_redis_500_competing_calls_share_exact_limit():
     async def case():
         clients = [Redis.from_url(os.environ['TEST_REDIS_URL'],decode_responses=True) for _ in range(5)]
         group = 'integration:' + uuid4().hex
-        limiters = [RedisLimiter(r,group,Limits(global_rpm=54,user_rpm=30,concurrency=100)) for r in clients]
+        limiters = [RedisLimiter(r,group,Limits(global_rpm=30,user_rpm=5,concurrency=100)) for r in clients]
         async def request(i):
             limiter = limiters[i % 5]
             try:
-                lease = await limiter.acquire(str(i % 5),'m',str(uuid4()))
+                lease = await limiter.acquire(str(i % 10),'m',str(uuid4()))
                 await limiter.release('m',lease)
                 return True
             except GatewayError as exc:
                 assert exc.status == 429
                 return False
         try:
-            assert sum(await asyncio.gather(*(request(i) for i in range(500)))) == 54
+            assert sum(await asyncio.gather(*(request(i) for i in range(500)))) == 30
         finally:
             for r in clients:
                 await r.aclose()

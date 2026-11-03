@@ -11,8 +11,8 @@ class GatewaySettings(BaseSettings):
     auth_redis_url: str = ''  # Must be the main Spring server's blacklist Redis DB.
     jwt_secret_base64: str = ''  # Spring ACCESS key, not refresh key.
     limit_pool: str = 'interactive-llm-v1'
-    global_rpm: int = Field(54, ge=1, le=100000)
-    user_rpm: int = Field(30, ge=1, le=100000)
+    global_rpm: int = Field(30, ge=1, le=100000)
+    user_rpm: int = Field(5, ge=1, le=100000)
     model_concurrency: int = Field(4, ge=1, le=1000)
     lease_seconds: int = Field(75, ge=5, le=600)
     deadline_seconds: float = Field(60, gt=0, le=300)
