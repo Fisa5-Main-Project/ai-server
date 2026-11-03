@@ -10,8 +10,8 @@ from .errors import GatewayError
 
 @dataclass(frozen=True)
 class Limits:
-    global_rpm: int = 54
-    user_rpm: int = 30
+    global_rpm: int = 30
+    user_rpm: int = 5
     concurrency: int = 4
     lease_seconds: int = 75
 
