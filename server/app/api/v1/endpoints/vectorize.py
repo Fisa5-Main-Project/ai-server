@@ -1,11 +1,12 @@
 """
 사용자 벡터화 API 엔드포인트
 """
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
+from app.gateway.auth import administrator
 from app.services.user_vectorization_service import user_vectorization_service
 from app.schemas.vectorize import VectorizationResponse
 
-router = APIRouter(tags=["User Vectorization"])
+router = APIRouter(tags=["User Vectorization"], dependencies=[Depends(administrator)])
 
 
 @router.post("/users/{user_id}/vectorize", response_model=VectorizationResponse)

@@ -31,6 +31,9 @@ class UserVectorizationService:
     def get_user_data_from_db(self, user_id):
         return self.source.read(user_id)
 
+    def get_recommendation_context(self, user_id):
+        return self.projection.recommendation_context(user_id)
+
     def generate_persona_text(self, user_data):
         return build_persona(user_data)
 

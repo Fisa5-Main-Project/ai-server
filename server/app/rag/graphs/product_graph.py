@@ -6,6 +6,7 @@ from langgraph.graph import StateGraph, END
 from langchain_core.messages import AIMessage
 from app.rag.states import ProductAgentState
 from app.rag.suitability import assess, resolve_intent, render_product
+from app.gateway.errors import GatewayError
 
 
 def build_product_graph(model=None, retrieve=None, today=date.today):
@@ -23,6 +24,8 @@ def build_product_graph(model=None, retrieve=None, today=date.today):
             parsed = json.loads(response.content)
             if not isinstance(parsed, dict):
                 parsed = {}
+        except GatewayError:
+            raise
         except Exception:
             pass  # Explicit parsing still applies; never guess customer risk.
         return {'intent': resolve_intent(state.get('query', ''), parsed)}
@@ -34,7 +37,10 @@ def build_product_graph(model=None, retrieve=None, today=date.today):
         if searcher is None:
             from app.rag.retrievers.candidates import retrieve_candidates
             searcher = retrieve_candidates
-        return {'candidates': await searcher(state['intent'], state.get('query', ''))}
+        kwargs = {}
+        if state.get('user_embedding') is not None:
+            kwargs['user_embedding'] = state['user_embedding']
+        return {'candidates': await searcher(state['intent'], state.get('query', ''), **kwargs)}
 
     def validate(state):
         candidates = state.get('candidates', [])
@@ -54,7 +60,8 @@ def build_product_graph(model=None, retrieve=None, today=date.today):
             if not reasons:
                 accepted.append(p)
         liked = set(state.get('liked', []))
-        accepted.sort(key=lambda p: (-p['risk_grade'], p['product_id'] not in liked, p['product_id']))
+        # Stable sorting preserves retrieval relevance within equal risk/feedback groups.
+        accepted.sort(key=lambda p: (-p['risk_grade'], p['product_id'] not in liked))
         accepted = accepted[:3]
         selected = {p['product_id'] for p in accepted}
         for d in decisions:

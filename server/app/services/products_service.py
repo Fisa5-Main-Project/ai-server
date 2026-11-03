@@ -8,6 +8,7 @@ import asyncio
 from typing import List
 
 from app.rag.suitability import POLICY_VERSION, build_profile
+from app.gateway.errors import GatewayError
 
 logger = logging.getLogger(__name__)
 
@@ -87,11 +88,13 @@ class ProductsService:
         record = {"request_id": request_id, "user_id": user_id,
                   "timestamp": datetime.now(timezone.utc), "policy_version": POLICY_VERSION}
         try:
-            snapshot = await asyncio.to_thread(user_vectorization_service.get_user_data_from_db, user_id)
+            snapshot, user_embedding = await asyncio.to_thread(
+                user_vectorization_service.get_recommendation_context, user_id)
             profile = build_profile(snapshot)
             liked, disliked = await asyncio.to_thread(self._feedback, user_id)
             result = await product_graph.ainvoke({
                 "query": user_message, "profile": profile, "liked": liked, "disliked": disliked,
+                "user_embedding": user_embedding,
             })
             products = [RecommendedProduct(**p) for p in result["products"]]
             record.update({"status": "completed", "profile": {
@@ -104,6 +107,8 @@ class ProductsService:
             return RecommendationResponse(products=products, request_id=request_id,
                 status="ok" if products else "no_suitable_products",
                 message=None if products else "요청 조건과 투자 성향에 맞고 가입 조건이 확인된 상품이 없습니다.")
+        except GatewayError:
+            raise
         except Exception as exc:
             logger.warning("Recommendation withheld request_id=%s error_type=%s", request_id, type(exc).__name__)
             try:

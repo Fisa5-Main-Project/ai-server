@@ -1,16 +1,16 @@
 """
 챗봇 API Request/Response 모델
 """
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Optional
 
 
 class ChatRequest(BaseModel):
     """챗봇 채팅 요청"""
-    user_id: int
-    session_id: str
-    message: str
-    keywords: Optional[List[int]] = None  # 추가 키워드 ID 리스트 (선택)
+    user_id: int = Field(gt=0)
+    session_id: str = Field(min_length=1, max_length=128)
+    message: str = Field(min_length=1, max_length=12000)
+    keywords: Optional[List[int]] = Field(None, max_length=30)
 
 
 class ChatProduct(BaseModel):

@@ -46,3 +46,23 @@ def test_duplicate_ids_with_conflicting_risk_are_blocked():
 def test_ranking_prefers_lower_risk_not_yield_and_limits_to_three():
     result = run([product(product_id=str(i), risk_grade=5 if i < 3 else 6) for i in range(6)])
     assert [p['product_id'] for p in result['products']] == ['3', '4', '5']
+
+
+def test_user_vector_changes_candidates_and_relevance_breaks_equal_risk_ties():
+    async def retrieve(intent, query, user_embedding=None):
+        if user_embedding == [0.2, 0.8]:
+            return [product(product_id='z-personal'), product(product_id='a-generic')]
+        return [product(product_id='a-generic')]
+    graph = build_product_graph(model=Model(), retrieve=retrieve, today=lambda: TODAY)
+    result = asyncio.run(graph.ainvoke({'query': '예금 추천', 'profile': profile(),
+                                        'user_embedding': [0.2, 0.8]}))
+    assert [p['product_id'] for p in result['products']] == ['z-personal', 'a-generic']
+
+
+def test_personal_vector_does_not_override_eligibility():
+    async def retrieve(intent, query, user_embedding=None):
+        return [product(product_id='personal-risky', risk_grade=1), product(product_id='safe')]
+    graph = build_product_graph(model=Model(), retrieve=retrieve, today=lambda: TODAY)
+    result = asyncio.run(graph.ainvoke({'query': '예금 추천', 'profile': profile(),
+                                        'user_embedding': [0.2, 0.8]}))
+    assert [p['product_id'] for p in result['products']] == ['safe']

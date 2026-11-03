@@ -1,7 +1,10 @@
 """
 금융상품 추천 API 엔드포인트
 """
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
+from app.gateway.auth import Principal, authenticated_user, authorize_owner
+from app.gateway.errors import GatewayError
+from app.gateway.service import usage_context
 from app.schemas.recommendation import RecommendationResponse
 from app.services.products_service import products_service
 
@@ -9,7 +12,7 @@ router = APIRouter(tags=["Recommendations"])
 
 
 @router.get("/recommendations/{user_id}", response_model=RecommendationResponse)
-async def get_recommendations(user_id: int):
+async def get_recommendations(user_id: int, principal: Principal = Depends(authenticated_user)):
     """
     사용자 ID 기반 맞춤형 금융상품 추천
     
@@ -33,9 +36,12 @@ async def get_recommendations(user_id: int):
     - benefit: 핵심 혜택 요약
     - reason: AI 생성 추천 이유
     """
+    authorize_owner(principal, user_id)
     try:
-        recommendations = await products_service.get_recommendations(user_id)
-        print("recommendations", recommendations)
+        with usage_context(principal.user_id, 'recommendations'):
+            recommendations = await products_service.get_recommendations(principal.user_id)
         return recommendations
+    except GatewayError:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"추천 실패: 문제가 발생하였습니다.")

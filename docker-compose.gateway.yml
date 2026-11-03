@@ -1,0 +1,23 @@
+# Overlay: docker compose -f docker-compose.local.yml -f docker-compose.gateway.yml up -d --build ai_server llm-redis
+# Use a separate Redis from Airflow; the limiter must not be evicted under cache pressure.
+services:
+  llm-redis:
+    image: redis:7.2-alpine
+    command: [redis-server, --appendonly, 'yes', --appendfsync, everysec, --maxmemory-policy, noeviction]
+    expose: ['6379']
+    volumes:
+      - llm-redis-data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 5s
+      timeout: 2s
+      retries: 5
+  ai_server:
+    environment:
+      AI_REDIS_URL: redis://llm-redis:6379/0
+    depends_on:
+      llm-redis:
+        condition: service_healthy
+volumes:
+  llm-redis-data:

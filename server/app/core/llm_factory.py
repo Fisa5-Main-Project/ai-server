@@ -1,38 +1,23 @@
-from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_groq import ChatGroq
-from app.core.config import settings
+from langchain_core.messages import AIMessage
+from app.gateway.runtime import get_gateway
+
+
+class ManagedLLM:
+    """Every physical LLM request goes through shared admission and metering."""
+
+    def __init__(self, temperature):
+        self.temperature = temperature
+
+    async def ainvoke(self, messages):
+        result = await get_gateway().invoke(messages, temperature=self.temperature)
+        usage = None
+        if all(x is not None for x in (result.input_tokens, result.output_tokens, result.total_tokens)):
+            usage = {'input_tokens': result.input_tokens, 'output_tokens': result.output_tokens,
+                     'total_tokens': result.total_tokens}
+        return AIMessage(content=result.content, usage_metadata=usage)
 
 def get_llm(temperature: float = 0.3, streaming: bool = False):
-    """
-    설정에 따라 Gemini 또는 Groq LLM 인스턴스를 반환합니다.
-    
-    Args:
-        temperature (float): 생성 다양성 조절 (0.0 ~ 1.0)
-        streaming (bool): 스트리밍 응답 여부
-        
-    Returns:
-        BaseChatModel: 구성된 LLM 인스턴스
-    """
-    provider = settings.LLM_PROVIDER.lower()
-    
-    if provider == "groq":
-        if not settings.GROQ_API_KEY:
-            raise ValueError("GROQ_API_KEY is not set in .env")
-            
-        return ChatGroq(
-            model_name="qwen/qwen3-32b", # llama-3.3-70b-versatile
-            temperature=temperature,
-            api_key=settings.GROQ_API_KEY,
-            streaming=streaming
-        )
-        
-    elif provider == "gemini":
-        return ChatGoogleGenerativeAI(
-            model="gemini-2.5-flash",
-            google_api_key=settings.GEMINI_API_KEY,
-            temperature=temperature,
-            streaming=streaming
-        )
-        
-    else:
-        raise ValueError(f"Unsupported LLM provider: {provider}. Gemini 혹은 Groq을 사용해주세요.")
+    """Return an async ainvoke adapter for the server-configured managed provider."""
+    if streaming:
+        raise ValueError('Use the existing chat SSE endpoint; provider token streaming is not supported')
+    return ManagedLLM(temperature)

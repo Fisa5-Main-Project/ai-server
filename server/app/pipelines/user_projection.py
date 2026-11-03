@@ -19,7 +19,7 @@ class UserProjection:
         self.embedder, self.model = embedder, model
         self.max_attempts, self.lease_seconds = max_attempts, lease_seconds
 
-    def refresh(self, user_id):
+    def refresh(self, user_id, *, include_snapshot=False):
         key = f"user_{user_id}"
         for _ in range(5):
             # Reserve before reading. Older source reads cannot overwrite newer refreshes.
@@ -57,8 +57,23 @@ class UserProjection:
                 update = {"$set": fields}
             result = self.collection.update_one(match, update)
             if result.matched_count:
-                return {"user_id": user_id, "persona_text": text, "persona_hash": digest, "status": "success"}
+                result = {"user_id": user_id, "persona_text": text, "persona_hash": digest, "status": "success"}
+                if include_snapshot:
+                    result['source_snapshot'] = data
+                return result
         raise ProjectionBusy("Concurrent user refreshes; retry the request")
+
+    def recommendation_context(self, user_id):
+        """Use a persisted vector matching the exact snapshot used for eligibility."""
+        result = self.refresh(user_id, include_snapshot=True)
+        digest = result['persona_hash']
+        vector = self.current_embedding(user_id, expected_hash=digest)
+        if vector is None:
+            self.embed_pending(user_id)
+            vector = self.current_embedding(user_id, expected_hash=digest)
+        if vector is None:
+            raise ProjectionBusy('Current user embedding unavailable; retry the request')
+        return result['source_snapshot'], vector
 
     def embed_pending(self, user_id):
         now = datetime.now(timezone.utc)
@@ -102,10 +117,11 @@ class UserProjection:
             "$unset": {"embedding_retry_at": "", "embedding_error_type": "", "embedding_lease_token": "", "embedding_lease_until": ""}})
         return bool(result.matched_count)
 
-    def current_embedding(self, user_id):
+    def current_embedding(self, user_id, expected_hash=None):
         doc = self.collection.find_one({"_id": f"user_{user_id}", "deleted": False})
         if (doc and doc.get("embedding_status") == "ready"
                 and doc.get("embedding_hash") == doc.get("persona_hash")
+                and (expected_hash is None or doc.get('persona_hash') == expected_hash)
                 and doc.get("embedding_model") == self.model):
             return doc.get("embedding")
         return None

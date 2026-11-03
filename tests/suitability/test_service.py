@@ -19,9 +19,10 @@ def setup(monkeypatch):
     source = Mock()
     source.get_user_data_from_db.return_value = {'user': {'investment_tendancy': '안정추구형'},
         'assets': [{'type': 'CURRENT', 'balance': 1000000}]}
+    source.get_recommendation_context.return_value = (source.get_user_data_from_db.return_value, [0.2, 0.8])
     monkeypatch.setattr(module, 'user_vectorization_service', source)
-    async def retrieve(intent, query):
-        return [product()]
+    async def retrieve(intent, query, user_embedding=None):
+        return [product()] if user_embedding == [0.2, 0.8] else []
     graph = module.build_product_graph(model=Mock(ainvoke=AsyncMock(side_effect=RuntimeError())),
                                        retrieve=retrieve, today=lambda: TODAY)
     monkeypatch.setattr(module, 'product_graph', graph)
@@ -43,6 +44,14 @@ def test_feedback_failure_never_returns_products(monkeypatch):
     service, _ = setup(monkeypatch)
     service.chat_logs_collection.find.side_effect = RuntimeError('unavailable')
     assert asyncio.run(service.get_recommendations(42)).products == []
+
+
+def test_embedding_unavailable_never_returns_unpersonalized_products(monkeypatch):
+    service, source = setup(monkeypatch)
+    source.get_recommendation_context.side_effect = RuntimeError('embedding not ready')
+    response = asyncio.run(service.get_recommendations(42, '예금 추천'))
+    assert response.status == 'unavailable'
+    assert response.products == []
 
 
 def test_audit_failure_never_returns_untracked_products(monkeypatch):

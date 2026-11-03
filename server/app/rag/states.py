@@ -8,6 +8,7 @@ class ProductAgentState(TypedDict, total=False):
     persona: str
     query: str
     profile: dict
+    user_embedding: list[float]
     disliked: list[str]
     liked: list[str]
     intent: dict
